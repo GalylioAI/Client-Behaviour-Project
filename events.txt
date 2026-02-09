@@ -1,0 +1,1911 @@
+===============================================================================
+COMPREHENSIVE E-COMMERCE BEHAVIOR TRACKING EVENTS GUIDE
+For SaaS Analytics Platform - PrestaShop Module
+===============================================================================
+
+This guide contains all trackable events in an e-commerce store, organized by
+category, with data templates and improvement suggestions.
+
+===============================================================================
+TABLE OF CONTENTS
+===============================================================================
+1. User Session & Navigation Events
+2. Product Discovery Events
+3. Shopping Cart Events
+4. Checkout & Purchase Events
+5. User Account Events
+6. Search & Filter Events
+7. Promotional & Marketing Events
+8. Customer Service Events
+9. Post-Purchase Events
+10. Advanced Behavioral Events
+11. Technical & Performance Events
+12. Cross-Session & Attribution Events
+
+===============================================================================
+1. USER SESSION & NAVIGATION EVENTS
+===============================================================================
+
+1.1 PAGE_VIEW
+Description: Track every page a user visits
+Data Template:
+{
+  "event": "page_view",
+  "timestamp": "2024-02-06 14:30:45",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "customer_email": "user@example.com" or null,
+  "page_url": "/category/electronics",
+  "page_title": "Electronics - Best Deals",
+  "page_type": "category|product|home|checkout|cart|account",
+  "referrer_url": "https://google.com/search?q=...",
+  "device_type": "mobile|desktop|tablet",
+  "browser": "Chrome 120",
+  "os": "Windows 10",
+  "screen_resolution": "1920x1080",
+  "viewport_size": "1366x768",
+  "ip_address": "192.168.1.1",
+  "country": "TN",
+  "city": "Tunis",
+  "language": "fr-TN",
+  "time_on_previous_page": 45 // seconds
+}
+💡 Improvement Idea: Track scroll depth (25%, 50%, 75%, 100%) to understand content engagement
+
+---
+
+1.2 SESSION_START
+Description: When a user starts a new session
+Data Template:
+{
+  "event": "session_start",
+  "timestamp": "2024-02-06 14:30:45",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "entry_page": "/",
+  "traffic_source": "organic|paid|direct|social|email|referral",
+  "utm_source": "google",
+  "utm_medium": "cpc",
+  "utm_campaign": "summer_sale",
+  "utm_term": "running shoes",
+  "utm_content": "ad_variant_a",
+  "device_type": "mobile|desktop|tablet",
+  "is_returning_visitor": true or false,
+  "previous_session_count": 3
+}
+💡 Improvement Idea: Detect if user came from a competitor's site (referrer analysis)
+
+---
+
+1.3 SESSION_END
+Description: When a user's session ends (timeout or explicit)
+Data Template:
+{
+  "event": "session_end",
+  "timestamp": "2024-02-06 15:45:30",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "session_duration": 4485, // seconds
+  "pages_viewed": 12,
+  "products_viewed": 5,
+  "items_added_to_cart": 2,
+  "purchase_made": true or false,
+  "exit_page": "/checkout/payment",
+  "bounce": false // true if only one page viewed
+}
+💡 Improvement Idea: Calculate "engagement score" based on actions taken
+
+---
+
+1.4 SCROLL_DEPTH
+Description: Track how far users scroll on pages
+Data Template:
+{
+  "event": "scroll_depth",
+  "timestamp": "2024-02-06 14:31:15",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "page_url": "/product/nike-air-max",
+  "scroll_percentage": 75, // 25, 50, 75, or 100
+  "time_to_depth": 30 // seconds to reach this depth
+}
+💡 Improvement Idea: Identify "dead zones" where users consistently stop scrolling
+
+---
+
+1.5 CLICK_EVENT
+Description: Track clicks on important elements
+Data Template:
+{
+  "event": "click",
+  "timestamp": "2024-02-06 14:31:20",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "page_url": "/category/shoes",
+  "element_type": "button|link|image|cta",
+  "element_id": "add-to-cart-btn",
+  "element_text": "Add to Cart",
+  "element_position": "product-card-3",
+  "click_coordinates": {"x": 450, "y": 320}
+}
+💡 Improvement Idea: Heat map generation from click coordinates
+
+===============================================================================
+2. PRODUCT DISCOVERY EVENTS
+===============================================================================
+
+2.1 PRODUCT_VIEW
+Description: User views a product detail page
+Data Template:
+{
+  "event": "product_view",
+  "timestamp": "2024-02-06 14:32:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "product_id": "PROD-789",
+  "product_name": "Nike Air Max 270",
+  "product_sku": "NIKE-AM270-BLK-42",
+  "product_category": "Shoes > Running > Men",
+  "product_price": 129.99,
+  "product_original_price": 159.99, // if on sale
+  "product_discount_percentage": 18.8,
+  "product_brand": "Nike",
+  "product_availability": "in_stock|out_of_stock|preorder",
+  "product_stock_quantity": 15,
+  "product_image_url": "https://...",
+  "product_rating": 4.5,
+  "product_review_count": 234,
+  "variant_selected": "Black, Size 42",
+  "position_in_list": 3, // if came from category
+  "list_name": "Category: Running Shoes", // or "Search Results", "Recommendations"
+  "time_on_product_page": null // will be filled on exit
+}
+💡 Improvement Idea: Track which product images users click/zoom on to understand visual preferences
+
+---
+
+2.2 PRODUCT_IMPRESSION
+Description: Product appears in a list (category, search, recommendations)
+Data Template:
+{
+  "event": "product_impression",
+  "timestamp": "2024-02-06 14:31:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "products": [
+    {
+      "product_id": "PROD-789",
+      "product_name": "Nike Air Max 270",
+      "product_price": 129.99,
+      "position": 1,
+      "list_name": "Category: Running Shoes"
+    },
+    {
+      "product_id": "PROD-790",
+      "product_name": "Adidas Ultraboost",
+      "product_price": 149.99,
+      "position": 2,
+      "list_name": "Category: Running Shoes"
+    }
+    // ... up to all visible products
+  ],
+  "page_url": "/category/running-shoes",
+  "total_products_in_list": 48
+}
+💡 Improvement Idea: Track which products were "above the fold" vs scrolled to
+
+---
+
+2.3 PRODUCT_QUICK_VIEW
+Description: User opens quick view/preview modal
+Data Template:
+{
+  "event": "product_quick_view",
+  "timestamp": "2024-02-06 14:31:30",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "product_id": "PROD-789",
+  "product_name": "Nike Air Max 270",
+  "source_page": "/category/running-shoes",
+  "position_in_list": 3
+}
+💡 Improvement Idea: Track if quick view led to cart add vs full product view
+
+---
+
+2.4 PRODUCT_COMPARISON_ADD
+Description: User adds product to comparison
+Data Template:
+{
+  "event": "product_comparison_add",
+  "timestamp": "2024-02-06 14:33:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "product_id": "PROD-789",
+  "product_name": "Nike Air Max 270",
+  "product_price": 129.99,
+  "comparison_products_count": 3, // total in comparison
+  "other_products_in_comparison": ["PROD-790", "PROD-791"]
+}
+💡 Improvement Idea: Analyze which products are compared together to find substitutes
+
+---
+
+2.5 PRODUCT_ZOOM
+Description: User zooms into product image
+Data Template:
+{
+  "event": "product_zoom",
+  "timestamp": "2024-02-06 14:32:15",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "product_id": "PROD-789",
+  "image_index": 2, // which image (1st, 2nd, 3rd...)
+  "zoom_count": 1 // how many times zoomed on this image
+}
+💡 Improvement Idea: Identify which product images drive most engagement/conversions
+
+---
+
+2.6 PRODUCT_VIDEO_PLAY
+Description: User plays product video
+Data Template:
+{
+  "event": "product_video_play",
+  "timestamp": "2024-02-06 14:32:30",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "product_id": "PROD-789",
+  "video_url": "https://...",
+  "video_duration": 120, // seconds
+  "watch_percentage": 75, // how much they watched
+  "completed": false
+}
+💡 Improvement Idea: Correlate video watch completion with purchase rate
+
+---
+
+2.7 PRODUCT_REVIEW_READ
+Description: User reads/expands product reviews
+Data Template:
+{
+  "event": "product_review_read",
+  "timestamp": "2024-02-06 14:33:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "product_id": "PROD-789",
+  "review_id": "REV-12345",
+  "review_rating": 5,
+  "review_helpful_votes": 23,
+  "review_age_days": 45 // how old is the review
+}
+💡 Improvement Idea: Track if negative reviews prevent purchases
+
+---
+
+2.8 PRODUCT_SIZE_GUIDE_VIEW
+Description: User opens size guide
+Data Template:
+{
+  "event": "product_size_guide_view",
+  "timestamp": "2024-02-06 14:32:45",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "product_id": "PROD-789",
+  "product_category": "Shoes"
+}
+💡 Improvement Idea: High size guide views = potential return risk indicator
+
+===============================================================================
+3. SHOPPING CART EVENTS
+===============================================================================
+
+3.1 ADD_TO_CART
+Description: User adds product to shopping cart
+Data Template:
+{
+  "event": "add_to_cart",
+  "timestamp": "2024-02-06 14:34:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "product_id": "PROD-789",
+  "product_name": "Nike Air Max 270",
+  "product_sku": "NIKE-AM270-BLK-42",
+  "product_category": "Shoes > Running > Men",
+  "product_price": 129.99,
+  "product_brand": "Nike",
+  "quantity_added": 1,
+  "cart_total_items": 3, // total items after add
+  "cart_total_value": 347.97, // total cart value
+  "variant_selected": "Black, Size 42",
+  "source": "product_page|quick_view|recommendation|cart_upsell",
+  "time_on_page_before_add": 120 // seconds
+}
+💡 Improvement Idea: Track "hesitation time" before add-to-cart to identify friction
+
+---
+
+3.2 REMOVE_FROM_CART
+Description: User removes product from cart
+Data Template:
+{
+  "event": "remove_from_cart",
+  "timestamp": "2024-02-06 14:35:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "product_id": "PROD-789",
+  "product_name": "Nike Air Max 270",
+  "product_price": 129.99,
+  "quantity_removed": 1,
+  "reason": null, // if you ask user why
+  "cart_total_items": 2, // remaining items
+  "cart_total_value": 218.98,
+  "time_in_cart": 60 // seconds product was in cart
+}
+💡 Improvement Idea: Trigger survey asking why they removed it
+
+---
+
+3.3 CART_VIEW
+Description: User views their shopping cart
+Data Template:
+{
+  "event": "cart_view",
+  "timestamp": "2024-02-06 14:36:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "cart_items": [
+    {
+      "product_id": "PROD-790",
+      "product_name": "Adidas Ultraboost",
+      "quantity": 1,
+      "price": 149.99,
+      "time_in_cart": 300 // seconds
+    },
+    {
+      "product_id": "PROD-791",
+      "product_name": "Running Socks",
+      "quantity": 2,
+      "price": 12.99,
+      "time_in_cart": 180
+    }
+  ],
+  "cart_total_items": 3,
+  "cart_total_value": 175.97,
+  "cart_age": 1800, // seconds since first item added
+  "abandoned_carts_count": 2 // how many times this user abandoned before
+}
+💡 Improvement Idea: Identify products frequently abandoned together
+
+---
+
+3.4 CART_QUANTITY_CHANGE
+Description: User changes quantity of item in cart
+Data Template:
+{
+  "event": "cart_quantity_change",
+  "timestamp": "2024-02-06 14:36:30",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "product_id": "PROD-791",
+  "product_name": "Running Socks",
+  "old_quantity": 2,
+  "new_quantity": 3,
+  "cart_total_value": 188.96
+}
+💡 Improvement Idea: Track bulk buying patterns for inventory planning
+
+---
+
+3.5 APPLY_COUPON
+Description: User applies a discount coupon
+Data Template:
+{
+  "event": "apply_coupon",
+  "timestamp": "2024-02-06 14:37:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "coupon_code": "SUMMER20",
+  "coupon_success": true,
+  "discount_amount": 37.79,
+  "discount_type": "percentage|fixed_amount|free_shipping",
+  "discount_value": 20, // 20% or $20
+  "cart_total_before": 188.96,
+  "cart_total_after": 151.17,
+  "coupon_source": "email|popup|affiliate|manual" // if trackable
+}
+💡 Improvement Idea: Track failed coupon attempts to identify competitor promotions
+
+---
+
+3.6 REMOVE_COUPON
+Description: User removes applied coupon
+Data Template:
+{
+  "event": "remove_coupon",
+  "timestamp": "2024-02-06 14:37:30",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "coupon_code": "SUMMER20",
+  "discount_amount_removed": 37.79,
+  "cart_total_before": 151.17,
+  "cart_total_after": 188.96
+}
+
+---
+
+3.7 CART_ABANDONMENT
+Description: User leaves with items in cart (triggered after timeout)
+Data Template:
+{
+  "event": "cart_abandonment",
+  "timestamp": "2024-02-06 15:37:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "customer_email": "user@example.com" or null,
+  "cart_items": [...], // same as cart_view
+  "cart_total_value": 188.96,
+  "cart_age": 3600, // seconds
+  "abandonment_stage": "cart|checkout_shipping|checkout_payment",
+  "last_page_visited": "/cart",
+  "exit_intent_triggered": false, // if you have exit intent popup
+  "recovery_email_sent": false
+}
+💡 Improvement Idea: A/B test different recovery email timing based on user behavior patterns
+
+===============================================================================
+4. CHECKOUT & PURCHASE EVENTS
+===============================================================================
+
+4.1 CHECKOUT_START
+Description: User initiates checkout process
+Data Template:
+{
+  "event": "checkout_start",
+  "timestamp": "2024-02-06 14:38:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "cart_items": [...],
+  "cart_total_value": 188.96,
+  "cart_total_items": 3,
+  "checkout_type": "guest|registered|guest_with_option_to_register",
+  "has_account": true or false
+}
+💡 Improvement Idea: Track how many steps users see before completing purchase
+
+---
+
+4.2 CHECKOUT_STEP_COMPLETED
+Description: User completes a step in checkout
+Data Template:
+{
+  "event": "checkout_step_completed",
+  "timestamp": "2024-02-06 14:39:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "step_number": 1,
+  "step_name": "shipping_address",
+  "time_on_step": 45, // seconds
+  "cart_total_value": 188.96
+}
+💡 Improvement Idea: Identify which checkout step causes most drop-offs
+
+---
+
+4.3 CHECKOUT_SHIPPING_METHOD_SELECTED
+Description: User selects shipping method
+Data Template:
+{
+  "event": "checkout_shipping_method_selected",
+  "timestamp": "2024-02-06 14:40:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "shipping_method": "Standard Shipping",
+  "shipping_cost": 9.99,
+  "estimated_delivery_days": 5,
+  "cart_total_value": 188.96,
+  "order_total_with_shipping": 198.95,
+  "other_shipping_options_viewed": ["Express Shipping", "Free Shipping"]
+}
+💡 Improvement Idea: Analyze if shipping cost causes checkout abandonment
+
+---
+
+4.4 CHECKOUT_PAYMENT_METHOD_SELECTED
+Description: User selects payment method
+Data Template:
+{
+  "event": "checkout_payment_method_selected",
+  "timestamp": "2024-02-06 14:41:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "payment_method": "credit_card|paypal|bank_transfer|cash_on_delivery",
+  "payment_provider": "Stripe|PayPal|etc",
+  "order_total": 198.95
+}
+💡 Improvement Idea: Correlation between payment method and conversion rate
+
+---
+
+4.5 PURCHASE_COMPLETED
+Description: User successfully completes a purchase
+Data Template:
+{
+  "event": "purchase_completed",
+  "timestamp": "2024-02-06 14:42:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345",
+  "customer_email": "user@example.com",
+  "order_id": "ORD-98765",
+  "order_total": 198.95,
+  "order_subtotal": 188.96,
+  "tax_amount": 0,
+  "shipping_cost": 9.99,
+  "discount_amount": 0,
+  "coupon_code_used": null,
+  "payment_method": "credit_card",
+  "shipping_method": "Standard Shipping",
+  "currency": "USD",
+  "items_purchased": [
+    {
+      "product_id": "PROD-790",
+      "product_name": "Adidas Ultraboost",
+      "product_sku": "ADIDAS-UB-WHT-43",
+      "product_category": "Shoes > Running > Men",
+      "quantity": 1,
+      "price": 149.99,
+      "product_brand": "Adidas"
+    },
+    {
+      "product_id": "PROD-791",
+      "product_name": "Running Socks",
+      "quantity": 3,
+      "price": 12.99,
+      "product_category": "Accessories > Socks"
+    }
+  ],
+  "is_first_purchase": true,
+  "customer_lifetime_value": 198.95,
+  "customer_total_orders": 1,
+  "time_from_session_start_to_purchase": 720, // seconds
+  "time_from_first_cart_add_to_purchase": 480,
+  "billing_country": "TN",
+  "shipping_country": "TN",
+  "billing_city": "Tunis",
+  "shipping_city": "Tunis"
+}
+💡 Improvement Idea: Calculate customer acquisition cost per channel and compare to order value
+
+---
+
+4.6 PAYMENT_FAILED
+Description: Payment attempt failed
+Data Template:
+{
+  "event": "payment_failed",
+  "timestamp": "2024-02-06 14:41:30",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "order_total": 198.95,
+  "payment_method": "credit_card",
+  "payment_provider": "Stripe",
+  "error_code": "card_declined",
+  "error_message": "Your card was declined",
+  "retry_count": 1 // how many times they tried
+}
+💡 Improvement Idea: Alert for unusual payment failure spikes (possible fraud or technical issue)
+
+---
+
+4.7 ORDER_MODIFICATION
+Description: User modifies order before shipping
+Data Template:
+{
+  "event": "order_modification",
+  "timestamp": "2024-02-06 15:00:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345",
+  "order_id": "ORD-98765",
+  "modification_type": "cancel_item|change_address|change_shipping",
+  "modified_field": "shipping_address",
+  "old_value": "123 Old Street",
+  "new_value": "456 New Street"
+}
+
+===============================================================================
+5. USER ACCOUNT EVENTS
+===============================================================================
+
+5.1 ACCOUNT_REGISTRATION
+Description: User creates a new account
+Data Template:
+{
+  "event": "account_registration",
+  "timestamp": "2024-02-06 14:30:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345",
+  "customer_email": "user@example.com",
+  "registration_method": "email|google|facebook|apple",
+  "registration_source": "checkout|header|popup|product_page",
+  "has_items_in_cart": true,
+  "cart_value_at_registration": 188.96,
+  "newsletter_opted_in": true,
+  "sms_opted_in": false,
+  "account_type": "individual|business"
+}
+💡 Improvement Idea: Track which registration source converts best to first purchase
+
+---
+
+5.2 LOGIN
+Description: User logs into their account
+Data Template:
+{
+  "event": "login",
+  "timestamp": "2024-02-06 14:30:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345",
+  "customer_email": "user@example.com",
+  "login_method": "email|google|facebook|apple",
+  "days_since_last_login": 7,
+  "previous_order_count": 5,
+  "customer_lifetime_value": 847.50
+}
+💡 Improvement Idea: Personalize homepage based on days since last visit
+
+---
+
+5.3 LOGOUT
+Description: User logs out
+Data Template:
+{
+  "event": "logout",
+  "timestamp": "2024-02-06 15:30:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345",
+  "session_duration": 3600,
+  "actions_during_session": 15
+}
+
+---
+
+5.4 PASSWORD_RESET_REQUEST
+Description: User requests password reset
+Data Template:
+{
+  "event": "password_reset_request",
+  "timestamp": "2024-02-06 14:25:00",
+  "customer_email": "user@example.com",
+  "reset_method": "email|sms"
+}
+💡 Improvement Idea: Track abandoned password resets to improve UX
+
+---
+
+5.5 PROFILE_UPDATE
+Description: User updates their profile information
+Data Template:
+{
+  "event": "profile_update",
+  "timestamp": "2024-02-06 15:00:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345",
+  "fields_updated": ["phone_number", "shipping_address"],
+  "profile_completeness": 85 // percentage
+}
+
+---
+
+5.6 WISHLIST_ADD
+Description: User adds product to wishlist
+Data Template:
+{
+  "event": "wishlist_add",
+  "timestamp": "2024-02-06 14:33:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345",
+  "product_id": "PROD-789",
+  "product_name": "Nike Air Max 270",
+  "product_price": 129.99,
+  "product_category": "Shoes > Running > Men",
+  "wishlist_total_items": 8,
+  "source_page": "product_page|category|search"
+}
+💡 Improvement Idea: Send price drop alerts when wishlisted items go on sale
+
+---
+
+5.7 WISHLIST_REMOVE
+Description: User removes product from wishlist
+Data Template:
+{
+  "event": "wishlist_remove",
+  "timestamp": "2024-02-06 14:34:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345",
+  "product_id": "PROD-789",
+  "time_in_wishlist": 259200, // seconds (3 days)
+  "reason": "purchased|not_interested|price_too_high"
+}
+
+---
+
+5.8 ADDRESS_BOOK_ADD
+Description: User adds new address to address book
+Data Template:
+{
+  "event": "address_book_add",
+  "timestamp": "2024-02-06 14:35:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345",
+  "address_type": "shipping|billing|both",
+  "country": "TN",
+  "city": "Tunis",
+  "is_default": true,
+  "total_addresses": 3
+}
+
+---
+
+5.9 SAVED_PAYMENT_METHOD
+Description: User saves payment method for future use
+Data Template:
+{
+  "event": "saved_payment_method",
+  "timestamp": "2024-02-06 14:42:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345",
+  "payment_method_type": "credit_card|paypal|bank_account",
+  "card_brand": "visa|mastercard|amex", // if applicable
+  "is_default": true,
+  "total_saved_methods": 2
+}
+
+===============================================================================
+6. SEARCH & FILTER EVENTS
+===============================================================================
+
+6.1 SEARCH_QUERY
+Description: User performs a search
+Data Template:
+{
+  "event": "search_query",
+  "timestamp": "2024-02-06 14:28:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "search_term": "running shoes men",
+  "search_results_count": 48,
+  "search_type": "site_search|autocomplete",
+  "results_clicked": true or false,
+  "first_result_clicked_position": 3,
+  "time_to_click": 5, // seconds
+  "refinements_used": ["brand:Nike", "size:42"],
+  "corrected_query": null, // if search was auto-corrected
+  "zero_results": false
+}
+💡 Improvement Idea: Track zero-result searches to improve product catalog
+
+---
+
+6.2 SEARCH_AUTOCOMPLETE_CLICK
+Description: User clicks autocomplete suggestion
+Data Template:
+{
+  "event": "search_autocomplete_click",
+  "timestamp": "2024-02-06 14:27:45",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "typed_query": "runn",
+  "clicked_suggestion": "running shoes",
+  "suggestion_position": 2,
+  "suggestion_type": "product|category|brand|keyword"
+}
+💡 Improvement Idea: Optimize autocomplete based on what users actually click
+
+---
+
+6.3 FILTER_APPLIED
+Description: User applies filter to product list
+Data Template:
+{
+  "event": "filter_applied",
+  "timestamp": "2024-02-06 14:29:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "page_url": "/category/shoes",
+  "filter_type": "price|brand|size|color|rating|category",
+  "filter_name": "brand",
+  "filter_value": "Nike",
+  "active_filters": {
+    "brand": ["Nike", "Adidas"],
+    "price": "100-200",
+    "size": "42"
+  },
+  "results_count_before": 120,
+  "results_count_after": 35
+}
+💡 Improvement Idea: Track filter combinations that lead to zero results
+
+---
+
+6.4 FILTER_REMOVED
+Description: User removes a filter
+Data Template:
+{
+  "event": "filter_removed",
+  "timestamp": "2024-02-06 14:29:30",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "filter_type": "brand",
+  "filter_value": "Adidas",
+  "results_count_after": 48
+}
+
+---
+
+6.5 SORT_CHANGED
+Description: User changes product sorting
+Data Template:
+{
+  "event": "sort_changed",
+  "timestamp": "2024-02-06 14:29:15",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "page_url": "/category/shoes",
+  "previous_sort": "relevance",
+  "new_sort": "price_low_to_high",
+  "results_count": 48
+}
+💡 Improvement Idea: Track if price-sorting indicates price sensitivity
+
+---
+
+6.6 PAGINATION_CLICK
+Description: User navigates to different page of results
+Data Template:
+{
+  "event": "pagination_click",
+  "timestamp": "2024-02-06 14:30:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "page_url": "/category/shoes",
+  "previous_page": 1,
+  "new_page": 2,
+  "total_pages": 5,
+  "results_per_page": 24
+}
+💡 Improvement Idea: Users who browse many pages may need better filters
+
+===============================================================================
+7. PROMOTIONAL & MARKETING EVENTS
+===============================================================================
+
+7.1 BANNER_CLICK
+Description: User clicks promotional banner
+Data Template:
+{
+  "event": "banner_click",
+  "timestamp": "2024-02-06 14:27:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "banner_id": "BANNER-001",
+  "banner_name": "Summer Sale 2024",
+  "banner_position": "homepage_hero",
+  "banner_type": "image|video|carousel",
+  "destination_url": "/sale/summer",
+  "campaign_name": "summer_sale_2024"
+}
+💡 Improvement Idea: A/B test banner positions and designs
+
+---
+
+7.2 POPUP_DISPLAYED
+Description: Marketing popup is shown to user
+Data Template:
+{
+  "event": "popup_displayed",
+  "timestamp": "2024-02-06 14:27:30",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "popup_id": "POPUP-001",
+  "popup_type": "newsletter|exit_intent|discount|new_arrival",
+  "popup_trigger": "time_delay|scroll_depth|exit_intent|page_load",
+  "page_url": "/",
+  "has_seen_before": false
+}
+
+---
+
+7.3 POPUP_INTERACTION
+Description: User interacts with popup
+Data Template:
+{
+  "event": "popup_interaction",
+  "timestamp": "2024-02-06 14:27:35",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "popup_id": "POPUP-001",
+  "action": "subscribed|dismissed|closed|clicked_cta",
+  "email_provided": "user@example.com" or null,
+  "time_displayed": 5 // seconds before interaction
+}
+💡 Improvement Idea: Test popup timing to minimize annoyance, maximize conversions
+
+---
+
+7.4 NEWSLETTER_SUBSCRIPTION
+Description: User subscribes to newsletter
+Data Template:
+{
+  "event": "newsletter_subscription",
+  "timestamp": "2024-02-06 14:28:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "email": "user@example.com",
+  "source": "footer|popup|checkout|account_registration",
+  "subscription_preferences": ["weekly_deals", "new_arrivals"],
+  "incentive_offered": "10% discount code"
+}
+
+---
+
+7.5 EMAIL_LINK_CLICK
+Description: User clicks link in marketing email (requires tracking parameters)
+Data Template:
+{
+  "event": "email_link_click",
+  "timestamp": "2024-02-06 14:25:00",
+  "customer_id": "12345",
+  "customer_email": "user@example.com",
+  "campaign_id": "CAMP-001",
+  "campaign_name": "Weekly Newsletter - Feb 6",
+  "link_clicked": "https://store.com/product/123?utm_source=email&utm_campaign=newsletter",
+  "email_type": "promotional|transactional|abandoned_cart"
+}
+💡 Improvement Idea: Track email→purchase conversion rate per campaign
+
+---
+
+7.6 SOCIAL_SHARE
+Description: User shares product on social media
+Data Template:
+{
+  "event": "social_share",
+  "timestamp": "2024-02-06 14:33:30",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "product_id": "PROD-789",
+  "product_name": "Nike Air Max 270",
+  "platform": "facebook|twitter|pinterest|whatsapp|email",
+  "share_type": "product|wishlist|category"
+}
+💡 Improvement Idea: Track virality - which products get shared most
+
+---
+
+7.7 REFERRAL_LINK_USED
+Description: Someone uses a referral link
+Data Template:
+{
+  "event": "referral_link_used",
+  "timestamp": "2024-02-06 14:20:00",
+  "session_id": "unique_session_identifier",
+  "referrer_customer_id": "12345",
+  "referred_customer_id": "67890" or "guest",
+  "referral_code": "REF-ABC123",
+  "incentive_type": "discount|credit|free_shipping"
+}
+💡 Improvement Idea: Calculate referral program ROI
+
+---
+
+7.8 LOYALTY_POINTS_EARNED
+Description: Customer earns loyalty points
+Data Template:
+{
+  "event": "loyalty_points_earned",
+  "timestamp": "2024-02-06 14:42:00",
+  "customer_id": "12345",
+  "order_id": "ORD-98765",
+  "points_earned": 199, // 1 point per dollar
+  "total_points_balance": 1247,
+  "points_expiry_date": "2025-02-06",
+  "tier_level": "gold|silver|bronze"
+}
+
+---
+
+7.9 LOYALTY_POINTS_REDEEMED
+Description: Customer redeems loyalty points
+Data Template:
+{
+  "event": "loyalty_points_redeemed",
+  "timestamp": "2024-02-06 14:40:00",
+  "customer_id": "12345",
+  "order_id": "ORD-98765",
+  "points_redeemed": 500,
+  "discount_value": 25.00,
+  "remaining_points": 747
+}
+
+===============================================================================
+8. CUSTOMER SERVICE EVENTS
+===============================================================================
+
+8.1 LIVE_CHAT_STARTED
+Description: User initiates live chat
+Data Template:
+{
+  "event": "live_chat_started",
+  "timestamp": "2024-02-06 14:35:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "page_url": "/product/nike-air-max",
+  "chat_trigger": "user_initiated|proactive_invitation",
+  "has_items_in_cart": true,
+  "cart_value": 188.96
+}
+💡 Improvement Idea: Analyze which pages trigger most support requests
+
+---
+
+8.2 LIVE_CHAT_MESSAGE_SENT
+Description: User sends message in chat
+Data Template:
+{
+  "event": "live_chat_message_sent",
+  "timestamp": "2024-02-06 14:35:15",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "chat_id": "CHAT-12345",
+  "message_number": 1,
+  "message_intent": "product_question|order_status|return|complaint|general", // if AI classified
+  "sentiment": "positive|neutral|negative" // if AI analyzed
+}
+
+---
+
+8.3 LIVE_CHAT_ENDED
+Description: Chat session ends
+Data Template:
+{
+  "event": "live_chat_ended",
+  "timestamp": "2024-02-06 14:45:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "chat_id": "CHAT-12345",
+  "chat_duration": 600, // seconds
+  "message_count": 12,
+  "agent_id": "AGENT-001",
+  "resolution_status": "resolved|unresolved|escalated",
+  "customer_satisfaction_rating": 5 // if rated
+}
+💡 Improvement Idea: Correlate chat interactions with conversion rates
+
+---
+
+8.4 SUPPORT_TICKET_CREATED
+Description: User creates support ticket
+Data Template:
+{
+  "event": "support_ticket_created",
+  "timestamp": "2024-02-06 14:50:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345",
+  "ticket_id": "TICKET-9876",
+  "ticket_type": "product_question|order_issue|return|refund|technical|complaint",
+  "priority": "low|medium|high|urgent",
+  "related_order_id": "ORD-98765" or null,
+  "related_product_id": "PROD-789" or null
+}
+
+---
+
+8.5 FAQ_VIEW
+Description: User views FAQ/help article
+Data Template:
+{
+  "event": "faq_view",
+  "timestamp": "2024-02-06 14:34:30",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "article_id": "FAQ-45",
+  "article_title": "How to track my order",
+  "article_category": "shipping|returns|payments|account",
+  "search_query": "track order" or null,
+  "was_helpful": null // can track with feedback widget
+}
+💡 Improvement Idea: Track which FAQs don't solve issues (lead to chat/ticket)
+
+---
+
+8.6 REVIEW_SUBMITTED
+Description: Customer submits product review
+Data Template:
+{
+  "event": "review_submitted",
+  "timestamp": "2024-02-10 10:00:00",
+  "customer_id": "12345",
+  "product_id": "PROD-790",
+  "order_id": "ORD-98765",
+  "rating": 5,
+  "review_text": "Great shoes, very comfortable!",
+  "has_images": true,
+  "image_count": 2,
+  "days_after_purchase": 4,
+  "verified_purchase": true
+}
+💡 Improvement Idea: Incentivize reviews from users likely to give positive feedback
+
+---
+
+8.7 REVIEW_HELPFUL_VOTE
+Description: User marks review as helpful
+Data Template:
+{
+  "event": "review_helpful_vote",
+  "timestamp": "2024-02-06 14:33:15",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "product_id": "PROD-789",
+  "review_id": "REV-12345",
+  "vote": "helpful|not_helpful"
+}
+
+===============================================================================
+9. POST-PURCHASE EVENTS
+===============================================================================
+
+9.1 ORDER_TRACKING_VIEW
+Description: Customer checks order tracking
+Data Template:
+{
+  "event": "order_tracking_view",
+  "timestamp": "2024-02-07 10:00:00",
+  "customer_id": "12345",
+  "order_id": "ORD-98765",
+  "order_status": "processing|shipped|out_for_delivery|delivered",
+  "days_since_order": 1,
+  "tracking_views_count": 3 // how many times they've checked
+}
+💡 Improvement Idea: High tracking views = anxiety. Send proactive updates.
+
+---
+
+9.2 RETURN_REQUEST
+Description: Customer requests to return product
+Data Template:
+{
+  "event": "return_request",
+  "timestamp": "2024-02-15 14:00:00",
+  "customer_id": "12345",
+  "order_id": "ORD-98765",
+  "return_id": "RET-001",
+  "product_id": "PROD-790",
+  "product_name": "Adidas Ultraboost",
+  "quantity": 1,
+  "return_reason": "wrong_size|defective|not_as_described|changed_mind|other",
+  "return_reason_detail": "Shoes are too small",
+  "days_since_delivery": 9,
+  "refund_amount": 149.99
+}
+💡 Improvement Idea: Identify products with high return rates
+
+---
+
+9.3 EXCHANGE_REQUEST
+Description: Customer requests product exchange
+Data Template:
+{
+  "event": "exchange_request",
+  "timestamp": "2024-02-15 14:00:00",
+  "customer_id": "12345",
+  "order_id": "ORD-98765",
+  "original_product_id": "PROD-790",
+  "exchange_product_id": "PROD-792",
+  "exchange_reason": "wrong_size|wrong_color|upgrade|downgrade",
+  "original_variant": "Size 42",
+  "exchange_variant": "Size 43"
+}
+
+---
+
+9.4 REFUND_PROCESSED
+Description: Refund is issued to customer
+Data Template:
+{
+  "event": "refund_processed",
+  "timestamp": "2024-02-16 10:00:00",
+  "customer_id": "12345",
+  "order_id": "ORD-98765",
+  "refund_id": "REF-001",
+  "refund_amount": 149.99,
+  "refund_method": "original_payment|store_credit",
+  "refund_reason": "return|cancellation|price_adjustment",
+  "days_to_process": 1
+}
+
+---
+
+9.5 REORDER
+Description: Customer reorders same products
+Data Template:
+{
+  "event": "reorder",
+  "timestamp": "2024-03-06 14:00:00",
+  "customer_id": "12345",
+  "original_order_id": "ORD-98765",
+  "new_order_id": "ORD-98766",
+  "days_since_original_order": 28,
+  "reordered_products": ["PROD-791"], // Running Socks
+  "reorder_type": "exact_same|modified"
+}
+💡 Improvement Idea: Predict when customers will reorder consumables
+
+---
+
+9.6 PRODUCT_QUESTION_ASKED
+Description: Customer asks question about product
+Data Template:
+{
+  "event": "product_question_asked",
+  "timestamp": "2024-02-06 14:33:45",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "product_id": "PROD-789",
+  "question_text": "Does this come in wide width?",
+  "question_category": "sizing|compatibility|features|shipping|other"
+}
+💡 Improvement Idea: Auto-improve product descriptions based on common questions
+
+===============================================================================
+10. ADVANCED BEHAVIORAL EVENTS
+===============================================================================
+
+10.1 PRODUCT_RECOMMENDATION_VIEW
+Description: Recommended products shown to user
+Data Template:
+{
+  "event": "product_recommendation_view",
+  "timestamp": "2024-02-06 14:32:30",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "recommendation_type": "similar_products|cross_sell|upsell|trending|personalized",
+  "recommendation_algorithm": "collaborative_filtering|content_based|popularity|AI",
+  "context_product_id": "PROD-789", // product they were viewing
+  "recommended_products": ["PROD-800", "PROD-801", "PROD-802"],
+  "position": "product_page_bottom|cart_page|checkout"
+}
+💡 Improvement Idea: A/B test recommendation algorithms
+
+---
+
+10.2 PRODUCT_RECOMMENDATION_CLICK
+Description: User clicks recommended product
+Data Template:
+{
+  "event": "product_recommendation_click",
+  "timestamp": "2024-02-06 14:32:45",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "recommendation_type": "similar_products",
+  "clicked_product_id": "PROD-800",
+  "clicked_product_position": 2,
+  "context_product_id": "PROD-789"
+}
+💡 Improvement Idea: Calculate recommendation CTR and revenue impact
+
+---
+
+10.3 BACK_IN_STOCK_NOTIFICATION_SIGNUP
+Description: User signs up for back-in-stock alert
+Data Template:
+{
+  "event": "back_in_stock_notification_signup",
+  "timestamp": "2024-02-06 14:33:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "email": "user@example.com",
+  "product_id": "PROD-799",
+  "product_name": "Nike Air Max 270 - Size 44",
+  "variant_id": "VAR-123",
+  "notification_method": "email|sms|push"
+}
+💡 Improvement Idea: Track demand for out-of-stock items for inventory planning
+
+---
+
+10.4 PRICE_DROP_ALERT_SIGNUP
+Description: User signs up for price drop alert
+Data Template:
+{
+  "event": "price_drop_alert_signup",
+  "timestamp": "2024-02-06 14:33:30",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "email": "user@example.com",
+  "product_id": "PROD-789",
+  "current_price": 129.99,
+  "desired_price": 99.99,
+  "notification_method": "email|sms"
+}
+💡 Improvement Idea: Gauge price sensitivity per product
+
+---
+
+10.5 GIFT_CARD_PURCHASE
+Description: Customer purchases gift card
+Data Template:
+{
+  "event": "gift_card_purchase",
+  "timestamp": "2024-02-06 14:42:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345",
+  "gift_card_amount": 50.00,
+  "recipient_email": "friend@example.com",
+  "personal_message": "Happy Birthday!",
+  "scheduled_delivery_date": "2024-02-15"
+}
+💡 Improvement Idea: Track gift card redemption rates
+
+---
+
+10.6 GIFT_CARD_REDEMPTION
+Description: Gift card is used in purchase
+Data Template:
+{
+  "event": "gift_card_redemption",
+  "timestamp": "2024-02-20 11:00:00",
+  "customer_id": "67890",
+  "gift_card_code": "GIFT-ABC123",
+  "amount_redeemed": 50.00,
+  "order_id": "ORD-99999",
+  "gifter_customer_id": "12345",
+  "days_to_redemption": 14
+}
+💡 Improvement Idea: Track if gift card recipients become repeat customers
+
+---
+
+10.7 BUNDLE_VIEWED
+Description: User views product bundle
+Data Template:
+{
+  "event": "bundle_viewed",
+  "timestamp": "2024-02-06 14:34:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "bundle_id": "BUNDLE-001",
+  "bundle_name": "Complete Runner Kit",
+  "products_in_bundle": ["PROD-789", "PROD-791", "PROD-850"],
+  "bundle_price": 179.99,
+  "individual_total_price": 205.97,
+  "savings_amount": 25.98,
+  "savings_percentage": 12.6
+}
+
+---
+
+10.8 SUBSCRIPTION_SIGNUP
+Description: Customer signs up for subscription (recurring order)
+Data Template:
+{
+  "event": "subscription_signup",
+  "timestamp": "2024-02-06 14:43:00",
+  "customer_id": "12345",
+  "subscription_id": "SUB-001",
+  "product_id": "PROD-900",
+  "product_name": "Monthly Coffee Beans",
+  "subscription_frequency": "weekly|biweekly|monthly|quarterly",
+  "subscription_price": 29.99,
+  "discount_percentage": 10, // subscription discount
+  "first_delivery_date": "2024-02-13"
+}
+💡 Improvement Idea: Calculate subscription LTV vs one-time purchase
+
+---
+
+10.9 SUBSCRIPTION_CANCELLED
+Description: Customer cancels subscription
+Data Template:
+{
+  "event": "subscription_cancelled",
+  "timestamp": "2024-05-06 14:00:00",
+  "customer_id": "12345",
+  "subscription_id": "SUB-001",
+  "product_id": "PROD-900",
+  "cancellation_reason": "too_expensive|no_longer_needed|quality_issues|switching_to_competitor",
+  "cancellation_reason_detail": "Switched to local roaster",
+  "months_active": 3,
+  "total_revenue": 89.97,
+  "deliveries_completed": 3
+}
+💡 Improvement Idea: Win-back campaigns for cancelled subscriptions
+
+---
+
+10.10 COMPARISON_TOOL_USED
+Description: User uses product comparison feature
+Data Template:
+{
+  "event": "comparison_tool_used",
+  "timestamp": "2024-02-06 14:35:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "products_compared": [
+    {
+      "product_id": "PROD-789",
+      "product_name": "Nike Air Max 270",
+      "price": 129.99
+    },
+    {
+      "product_id": "PROD-790",
+      "product_name": "Adidas Ultraboost",
+      "price": 149.99
+    }
+  ],
+  "comparison_result": "PROD-790", // which one they chose, or null
+  "time_spent_comparing": 120 // seconds
+}
+💡 Improvement Idea: Understand competitive products within your catalog
+
+---
+
+10.11 VIRTUAL_TRY_ON_USED
+Description: User uses AR/virtual try-on feature
+Data Template:
+{
+  "event": "virtual_try_on_used",
+  "timestamp": "2024-02-06 14:32:15",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "product_id": "PROD-789",
+  "product_category": "Shoes",
+  "try_on_type": "AR|3D_model|size_recommendation",
+  "device_type": "mobile|desktop",
+  "duration": 45, // seconds
+  "added_to_cart_after": true
+}
+💡 Improvement Idea: Measure impact of AR on conversion and returns
+
+---
+
+10.12 SIZE_RECOMMENDATION_USED
+Description: User uses AI size recommendation
+Data Template:
+{
+  "event": "size_recommendation_used",
+  "timestamp": "2024-02-06 14:32:20",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "product_id": "PROD-789",
+  "measurements_provided": {
+    "height": 180, // cm
+    "weight": 75, // kg
+    "shoe_size_usual": 42
+  },
+  "recommended_size": "43",
+  "size_selected": "43",
+  "followed_recommendation": true
+}
+💡 Improvement Idea: Track if AI recommendations reduce returns
+
+===============================================================================
+11. TECHNICAL & PERFORMANCE EVENTS
+===============================================================================
+
+11.1 PAGE_LOAD_TIME
+Description: Track page performance
+Data Template:
+{
+  "event": "page_load_time",
+  "timestamp": "2024-02-06 14:30:45",
+  "session_id": "unique_session_identifier",
+  "page_url": "/product/nike-air-max",
+  "load_time": 1.2, // seconds
+  "dom_ready_time": 0.8,
+  "first_contentful_paint": 0.5,
+  "largest_contentful_paint": 1.0,
+  "cumulative_layout_shift": 0.05,
+  "connection_type": "4g|5g|wifi|3g",
+  "device_type": "mobile|desktop|tablet"
+}
+💡 Improvement Idea: Correlate slow pages with high bounce rates
+
+---
+
+11.2 JAVASCRIPT_ERROR
+Description: Client-side error occurred
+Data Template:
+{
+  "event": "javascript_error",
+  "timestamp": "2024-02-06 14:31:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "error_message": "Cannot read property 'price' of undefined",
+  "error_stack": "at addToCart (main.js:234)",
+  "page_url": "/product/nike-air-max",
+  "browser": "Chrome 120",
+  "os": "Windows 10",
+  "user_action": "add_to_cart_click" // what they were trying to do
+}
+💡 Improvement Idea: Alert on error spikes to catch bugs quickly
+
+---
+
+11.3 API_ERROR
+Description: Backend API error (track if visible to user)
+Data Template:
+{
+  "event": "api_error",
+  "timestamp": "2024-02-06 14:31:05",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "api_endpoint": "/api/cart/add",
+  "http_status": 500,
+  "error_code": "INTERNAL_SERVER_ERROR",
+  "request_id": "req-abc123",
+  "user_action": "add_to_cart"
+}
+💡 Improvement Idea: Track which errors cause checkout abandonment
+
+---
+
+11.4 FORM_ABANDONMENT
+Description: User starts filling form but doesn't complete
+Data Template:
+{
+  "event": "form_abandonment",
+  "timestamp": "2024-02-06 14:39:30",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "form_type": "checkout|registration|contact|newsletter",
+  "form_id": "checkout-form",
+  "fields_filled": ["email", "first_name", "last_name"],
+  "fields_total": 8,
+  "completion_percentage": 37.5,
+  "last_field_interacted": "phone_number",
+  "time_spent_on_form": 45, // seconds
+  "validation_errors": ["Invalid phone format"]
+}
+💡 Improvement Idea: Identify problematic form fields causing drop-offs
+
+---
+
+11.5 FORM_FIELD_ERROR
+Description: User encounters form validation error
+Data Template:
+{
+  "event": "form_field_error",
+  "timestamp": "2024-02-06 14:39:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "form_type": "checkout",
+  "field_name": "credit_card_number",
+  "error_type": "validation|required|format",
+  "error_message": "Invalid credit card number",
+  "retry_count": 2
+}
+💡 Improvement Idea: A/B test error message clarity
+
+---
+
+11.6 BROWSER_TAB_VISIBILITY
+Description: User switches tabs/minimizes browser
+Data Template:
+{
+  "event": "browser_tab_visibility",
+  "timestamp": "2024-02-06 14:40:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "visibility_state": "hidden|visible",
+  "page_url": "/checkout/payment",
+  "time_on_page_before_hide": 30 // seconds
+}
+💡 Improvement Idea: Track tab switching during checkout (price comparison?)
+
+---
+
+11.7 RAGE_CLICK
+Description: User rapidly clicks same element (frustration indicator)
+Data Template:
+{
+  "event": "rage_click",
+  "timestamp": "2024-02-06 14:38:00",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "page_url": "/checkout",
+  "element_id": "submit-order-btn",
+  "element_type": "button",
+  "click_count": 7, // rapid clicks
+  "time_window": 2 // seconds
+}
+💡 Improvement Idea: Identify broken buttons or slow-loading actions
+
+---
+
+11.8 COPY_TEXT
+Description: User copies text from page
+Data Template:
+{
+  "event": "copy_text",
+  "timestamp": "2024-02-06 14:32:10",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345" or "guest",
+  "page_url": "/product/nike-air-max",
+  "copied_text": "NIKE-AM270-BLK-42", // or partial
+  "text_category": "sku|price|product_name|description"
+}
+💡 Improvement Idea: Users copying SKUs might be comparing prices elsewhere
+
+===============================================================================
+12. CROSS-SESSION & ATTRIBUTION EVENTS
+===============================================================================
+
+12.1 DEVICE_SWITCH
+Description: User continues session on different device
+Data Template:
+{
+  "event": "device_switch",
+  "timestamp": "2024-02-06 16:00:00",
+  "customer_id": "12345",
+  "previous_session_id": "session-abc",
+  "new_session_id": "session-xyz",
+  "previous_device": "mobile",
+  "new_device": "desktop",
+  "has_cart_items": true,
+  "cart_synced": true
+}
+💡 Improvement Idea: Optimize cross-device experience
+
+---
+
+12.2 MULTI_TOUCH_ATTRIBUTION
+Description: Track all touchpoints leading to conversion
+Data Template:
+{
+  "event": "multi_touch_attribution",
+  "timestamp": "2024-02-06 14:42:00",
+  "customer_id": "12345",
+  "order_id": "ORD-98765",
+  "touchpoints": [
+    {
+      "timestamp": "2024-02-01 10:00:00",
+      "source": "google_organic",
+      "medium": "organic",
+      "campaign": null,
+      "page_visited": "/category/shoes"
+    },
+    {
+      "timestamp": "2024-02-03 14:00:00",
+      "source": "facebook",
+      "medium": "paid",
+      "campaign": "spring_sale",
+      "page_visited": "/product/nike-air-max"
+    },
+    {
+      "timestamp": "2024-02-06 14:30:00",
+      "source": "email",
+      "medium": "email",
+      "campaign": "abandoned_cart",
+      "page_visited": "/cart"
+    }
+  ],
+  "first_touch": "google_organic",
+  "last_touch": "email",
+  "days_to_conversion": 5
+}
+💡 Improvement Idea: Understand complete customer journey, not just last click
+
+---
+
+12.3 ASSISTED_CONVERSION
+Description: Track channels that assisted (didn't get last click)
+Data Template:
+{
+  "event": "assisted_conversion",
+  "timestamp": "2024-02-06 14:42:00",
+  "customer_id": "12345",
+  "order_id": "ORD-98765",
+  "assisting_channels": ["google_organic", "facebook_paid"],
+  "converting_channel": "email",
+  "total_touchpoints": 3
+}
+
+---
+
+12.4 CUSTOMER_LIFETIME_MILESTONE
+Description: Customer reaches LTV milestone
+Data Template:
+{
+  "event": "customer_lifetime_milestone",
+  "timestamp": "2024-02-06 14:42:00",
+  "customer_id": "12345",
+  "milestone": "$1000_spent",
+  "total_orders": 8,
+  "total_spent": 1047.50,
+  "customer_since_days": 365,
+  "average_order_value": 130.94
+}
+💡 Improvement Idea: Trigger VIP rewards at milestones
+
+---
+
+12.5 COHORT_BEHAVIOR
+Description: Track behavior by user cohort
+Data Template:
+{
+  "event": "cohort_behavior",
+  "timestamp": "2024-02-06 14:42:00",
+  "customer_id": "12345",
+  "registration_cohort": "2024-01", // year-month registered
+  "acquisition_channel": "google_organic",
+  "order_number": 3, // 3rd order for this customer
+  "time_to_nth_order": 25 // days to 3rd order
+}
+💡 Improvement Idea: Compare cohort retention and LTV
+
+===============================================================================
+IMPLEMENTATION PRIORITY RECOMMENDATIONS
+===============================================================================
+
+ESSENTIAL (Implement First):
+1. PAGE_VIEW - Foundation of all tracking
+2. ADD_TO_CART - Core conversion funnel
+3. PURCHASE_COMPLETED - Revenue tracking
+4. CART_ABANDONMENT - Recovery opportunity
+5. PRODUCT_VIEW - Product performance
+
+HIGH PRIORITY:
+6. SEARCH_QUERY - Understand user intent
+7. CHECKOUT_START - Funnel analysis
+8. CHECKOUT_STEP_COMPLETED - Identify friction
+9. FILTER_APPLIED - Product discovery
+10. PRODUCT_IMPRESSION - Content effectiveness
+
+MEDIUM PRIORITY:
+11. SESSION_START/END - Engagement metrics
+12. ACCOUNT_REGISTRATION - User growth
+13. WISHLIST_ADD - Intent signals
+14. NEWSLETTER_SUBSCRIPTION - Marketing list
+15. PRODUCT_RECOMMENDATION_CLICK - Personalization
+
+ADVANCED:
+16. MULTI_TOUCH_ATTRIBUTION - Full journey
+17. COHORT_BEHAVIOR - Long-term insights
+18. DEVICE_SWITCH - Cross-device tracking
+19. ASSISTED_CONVERSION - Channel value
+20. All AI/ML features (virtual try-on, size rec)
+
+===============================================================================
+DATA COLLECTION BEST PRACTICES
+===============================================================================
+
+1. PRIVACY & COMPLIANCE:
+   - Get user consent (GDPR, CCPA)
+   - Anonymize sensitive data (IP addresses, emails)
+   - Provide opt-out mechanism
+   - Clear privacy policy
+   - Secure data transmission (HTTPS)
+
+2. PERFORMANCE:
+   - Send data asynchronously (don't block UI)
+   - Batch events when possible
+   - Use lightweight JSON payloads
+   - Implement request queuing for offline scenarios
+   - Set reasonable timeout limits (5 seconds max)
+
+3. DATA QUALITY:
+   - Validate data before sending
+   - Use consistent naming conventions
+   - Include session_id in all events for correlation
+   - Timestamp everything in UTC
+   - Handle edge cases (guests, logged-out users)
+
+4. SCALABILITY:
+   - Use event queuing system (RabbitMQ, Kafka)
+   - Implement sampling for high-traffic sites
+   - Store raw events in data lake
+   - Process and aggregate in data warehouse
+   - Archive old data
+
+5. TESTING:
+   - Use webhook.site or RequestBin for initial testing
+   - Implement event validation
+   - Create test user accounts
+   - Monitor error rates
+   - Set up alerts for data anomalies
+
+===============================================================================
+ANALYTICS PLATFORM FEATURES TO BUILD
+===============================================================================
+
+Based on this data, your SaaS should offer:
+
+1. DASHBOARDS:
+   - Real-time conversion funnel
+   - Revenue analytics
+   - Product performance
+   - Customer segmentation
+   - Traffic sources
+   - Cart abandonment rates
+
+2. INSIGHTS:
+   - Abandoned cart recovery
+   - Product recommendation engine
+   - Customer lifetime value prediction
+   - Churn prediction
+   - Price optimization suggestions
+   - Inventory forecasting
+
+3. AUTOMATION:
+   - Abandoned cart emails
+   - Back-in-stock notifications
+   - Price drop alerts
+   - Personalized product recommendations
+   - Win-back campaigns
+   - Customer milestone rewards
+
+4. REPORTING:
+   - Custom report builder
+   - Cohort analysis
+   - Funnel analysis
+   - Attribution modeling
+   - A/B test results
+   - Export to CSV/PDF
+
+5. ALERTS:
+   - Revenue drops
+   - Conversion rate changes
+   - Error spikes
+   - Inventory low
+   - Unusual traffic patterns
+   - Fraud detection
+
+===============================================================================
+COMPETITIVE ADVANTAGES TO BUILD
+===============================================================================
+
+What will make your SaaS stand out:
+
+1. PrestaShop-specific optimization (most analytics are Shopify-focused)
+2. Real-time session replay with privacy controls
+3. AI-powered insights (not just data display)
+4. Automated recovery campaigns
+5. Cross-device journey tracking
+6. Predictive analytics (churn, LTV)
+7. Easy setup (1-click plugin install)
+8. Affordable pricing for small businesses
+9. GDPR-compliant by design
+10. Beautiful, actionable dashboards
+
+===============================================================================
+NEXT STEPS FOR YOUR INTERNSHIP PROJECT
+===============================================================================
+
+Week 1-2: Build Core Tracking
+- Implement: page_view, product_view, add_to_cart, purchase
+- Test with webhook.site
+- Store in simple database
+
+Week 3-4: Build Basic Dashboard
+- Show real-time events
+- Display conversion funnel
+- Revenue metrics
+- Top products
+
+Week 5-6: Add Advanced Features
+- Abandoned cart detection
+- Email notifications
+- Customer segmentation
+- Basic reporting
+
+Week 7-8: Polish & Deploy
+- Error handling
+- Performance optimization
+- Documentation
+- Demo presentation
+
+Good luck with your SaaS! This will be an impressive portfolio project.
+
+===============================================================================
