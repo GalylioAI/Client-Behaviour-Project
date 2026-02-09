@@ -73,6 +73,49 @@ class BehaviourTracker extends Module
         Configuration::updateValue('BT_EVENT_SCROLL_DEPTH', true);
         Configuration::updateValue('BT_EVENT_CLICK', true);
         Configuration::updateValue('BT_BUFFER_INTERVAL', 5); // Default 5 seconds
+        Configuration::updateValue('BT_DEBUG_MODE', false);
+
+        // Product Events
+        Configuration::updateValue('BT_EVENT_PRODUCT_VIEW', true);
+        Configuration::updateValue('BT_EVENT_PRODUCT_IMPRESSION', true);
+        Configuration::updateValue('BT_EVENT_PRODUCT_QUICK_VIEW', true);
+
+        // Cart Events
+        Configuration::updateValue('BT_EVENT_CART_UPDATE', true);
+        Configuration::updateValue('BT_EVENT_CART_VIEW', true);
+        Configuration::updateValue('BT_EVENT_CART_QUANTITY_CHANGE', true);
+        Configuration::updateValue('BT_EVENT_COUPON_APPLY', true);
+
+        // Checkout Events
+        Configuration::updateValue('BT_EVENT_CHECKOUT_START', true);
+        Configuration::updateValue('BT_EVENT_CHECKOUT_STEP', true);
+        Configuration::updateValue('BT_EVENT_SHIPPING_METHOD', true);
+        Configuration::updateValue('BT_EVENT_PAYMENT_METHOD', true);
+        Configuration::updateValue('BT_EVENT_PURCHASE_COMPLETED', true);
+        Configuration::updateValue('BT_EVENT_PAYMENT_FAILED', true);
+
+        // Account Events
+        Configuration::updateValue('BT_EVENT_REGISTRATION', true);
+        Configuration::updateValue('BT_EVENT_LOGIN', true);
+        Configuration::updateValue('BT_EVENT_LOGOUT', true);
+        Configuration::updateValue('BT_EVENT_PASSWORD_RESET', true);
+        Configuration::updateValue('BT_EVENT_PROFILE_UPDATE', true);
+        Configuration::updateValue('BT_EVENT_WISHLIST', true);
+        Configuration::updateValue('BT_EVENT_ADDRESS_BOOK', true);
+
+        // Search Events
+        Configuration::updateValue('BT_EVENT_SEARCH_QUERY', true);
+        Configuration::updateValue('BT_EVENT_SEARCH_AUTOCOMPLETE', true);
+        Configuration::updateValue('BT_EVENT_FILTER_APPLIED', true);
+        Configuration::updateValue('BT_EVENT_SORT_CHANGED', true);
+        Configuration::updateValue('BT_EVENT_ZERO_RESULTS', true);
+
+        // Marketing Events
+        Configuration::updateValue('BT_EVENT_NEWSLETTER_SIGNUP', true);
+        Configuration::updateValue('BT_EVENT_POPUP_INTERACTION', true);
+        Configuration::updateValue('BT_EVENT_BANNER_CLICK', true);
+        Configuration::updateValue('BT_EVENT_SOCIAL_SHARE', true);
+
         return true;
     }
 
@@ -90,6 +133,36 @@ class BehaviourTracker extends Module
         Configuration::deleteByName('BT_EVENT_SCROLL_DEPTH');
         Configuration::deleteByName('BT_EVENT_CLICK');
         Configuration::deleteByName('BT_BUFFER_INTERVAL');
+        Configuration::deleteByName('BT_DEBUG_MODE');
+        Configuration::deleteByName('BT_EVENT_PRODUCT_VIEW');
+        Configuration::deleteByName('BT_EVENT_PRODUCT_IMPRESSION');
+        Configuration::deleteByName('BT_EVENT_PRODUCT_QUICK_VIEW');
+        Configuration::deleteByName('BT_EVENT_CART_UPDATE');
+        Configuration::deleteByName('BT_EVENT_CART_VIEW');
+        Configuration::deleteByName('BT_EVENT_CART_QUANTITY_CHANGE');
+        Configuration::deleteByName('BT_EVENT_COUPON_APPLY');
+        Configuration::deleteByName('BT_EVENT_CHECKOUT_START');
+        Configuration::deleteByName('BT_EVENT_CHECKOUT_STEP');
+        Configuration::deleteByName('BT_EVENT_SHIPPING_METHOD');
+        Configuration::deleteByName('BT_EVENT_PAYMENT_METHOD');
+        Configuration::deleteByName('BT_EVENT_PURCHASE_COMPLETED');
+        Configuration::deleteByName('BT_EVENT_PAYMENT_FAILED');
+        Configuration::deleteByName('BT_EVENT_REGISTRATION');
+        Configuration::deleteByName('BT_EVENT_LOGIN');
+        Configuration::deleteByName('BT_EVENT_LOGOUT');
+        Configuration::deleteByName('BT_EVENT_PASSWORD_RESET');
+        Configuration::deleteByName('BT_EVENT_PROFILE_UPDATE');
+        Configuration::deleteByName('BT_EVENT_WISHLIST');
+        Configuration::deleteByName('BT_EVENT_ADDRESS_BOOK');
+        Configuration::deleteByName('BT_EVENT_SEARCH_QUERY');
+        Configuration::deleteByName('BT_EVENT_SEARCH_AUTOCOMPLETE');
+        Configuration::deleteByName('BT_EVENT_FILTER_APPLIED');
+        Configuration::deleteByName('BT_EVENT_SORT_CHANGED');
+        Configuration::deleteByName('BT_EVENT_ZERO_RESULTS');
+        Configuration::deleteByName('BT_EVENT_NEWSLETTER_SIGNUP');
+        Configuration::deleteByName('BT_EVENT_POPUP_INTERACTION');
+        Configuration::deleteByName('BT_EVENT_BANNER_CLICK');
+        Configuration::deleteByName('BT_EVENT_SOCIAL_SHARE');
 
         return parent::uninstall();
     }
@@ -167,6 +240,17 @@ class BehaviourTracker extends Module
                             'name' => 'BT_BUFFER_INTERVAL',
                             'desc' => $this->l('Time in seconds to buffer events before sending to server.'),
                             'class' => 'fixed-width-sm',
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Debug Mode'),
+                            'name' => 'BT_DEBUG_MODE',
+                            'is_bool' => true,
+                            'desc' => $this->l('Log events to browser console.'),
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
                         ),
 
                         // Header: PAGE_VIEW
@@ -294,6 +378,338 @@ class BehaviourTracker extends Module
                                 array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
                             ),
                         ),
+
+                        // Section: Product Discovery
+                        array(
+                            'type' => 'html',
+                            'name' => 'html_sec_prod',
+                            'html_content' => '<hr><h3>' . $this->l('Section 2: Product Discovery') . '</h3>',
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Product View'),
+                            'name' => 'BT_EVENT_PRODUCT_VIEW',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Product Impression (Lists)'),
+                            'name' => 'BT_EVENT_PRODUCT_IMPRESSION',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Quick View'),
+                            'name' => 'BT_EVENT_PRODUCT_QUICK_VIEW',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+
+                        // Section: Cart
+                        array(
+                            'type' => 'html',
+                            'name' => 'html_sec_cart',
+                            'html_content' => '<hr><h3>' . $this->l('Section 3: Shopping Cart') . '</h3>',
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Cart Updates (Add/Remove)'),
+                            'name' => 'BT_EVENT_CART_UPDATE',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Cart View'),
+                            'name' => 'BT_EVENT_CART_VIEW',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Quantity Change'),
+                            'name' => 'BT_EVENT_CART_QUANTITY_CHANGE',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Coupon Apply/Remove'),
+                            'name' => 'BT_EVENT_COUPON_APPLY',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+
+                        // Section: Checkout & Purchase
+                        array(
+                            'type' => 'html',
+                            'name' => 'html_sec_checkout',
+                            'html_content' => '<hr><h3>' . $this->l('Section 4: Checkout & Purchase') . '</h3>',
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Checkout Start'),
+                            'name' => 'BT_EVENT_CHECKOUT_START',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Checkout Step Completed'),
+                            'name' => 'BT_EVENT_CHECKOUT_STEP',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Shipping Method Selected'),
+                            'name' => 'BT_EVENT_SHIPPING_METHOD',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Payment Method Selected'),
+                            'name' => 'BT_EVENT_PAYMENT_METHOD',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Purchase Completed'),
+                            'name' => 'BT_EVENT_PURCHASE_COMPLETED',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Payment Failed'),
+                            'name' => 'BT_EVENT_PAYMENT_FAILED',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+
+                        // Section: User Account
+                        array(
+                            'type' => 'html',
+                            'name' => 'html_sec_account',
+                            'html_content' => '<hr><h3>' . $this->l('Section 5: User Account') . '</h3>',
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Registration'),
+                            'name' => 'BT_EVENT_REGISTRATION',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Login'),
+                            'name' => 'BT_EVENT_LOGIN',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Logout'),
+                            'name' => 'BT_EVENT_LOGOUT',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Password Reset'),
+                            'name' => 'BT_EVENT_PASSWORD_RESET',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Profile Update'),
+                            'name' => 'BT_EVENT_PROFILE_UPDATE',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Wishlist Add/Remove'),
+                            'name' => 'BT_EVENT_WISHLIST',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Address Book Operations'),
+                            'name' => 'BT_EVENT_ADDRESS_BOOK',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+
+                        // Section: Search & Filter
+                        array(
+                            'type' => 'html',
+                            'name' => 'html_sec_search',
+                            'html_content' => '<hr><h3>' . $this->l('Section 6: Search & Filters') . '</h3>',
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Search Query'),
+                            'name' => 'BT_EVENT_SEARCH_QUERY',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Search Autocomplete'),
+                            'name' => 'BT_EVENT_SEARCH_AUTOCOMPLETE',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Filter Applied'),
+                            'name' => 'BT_EVENT_FILTER_APPLIED',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Sort Changed'),
+                            'name' => 'BT_EVENT_SORT_CHANGED',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Zero Results'),
+                            'name' => 'BT_EVENT_ZERO_RESULTS',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+
+                        // Section: Marketing
+                        array(
+                            'type' => 'html',
+                            'name' => 'html_sec_marketing',
+                            'html_content' => '<hr><h3>' . $this->l('Section 7: Marketing & Promotions') . '</h3>',
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Newsletter Signup'),
+                            'name' => 'BT_EVENT_NEWSLETTER_SIGNUP',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Popup Interaction'),
+                            'name' => 'BT_EVENT_POPUP_INTERACTION',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Banner Click'),
+                            'name' => 'BT_EVENT_BANNER_CLICK',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+                        array(
+                            'type' => 'switch',
+                            'label' => $this->l('Social Share'),
+                            'name' => 'BT_EVENT_SOCIAL_SHARE',
+                            'is_bool' => true,
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
                     ),
                     'submit' => array(
                         'title' => $this->l('Save Settings'),
@@ -321,6 +737,36 @@ class BehaviourTracker extends Module
             'BT_EVENT_SCROLL_DEPTH' => Configuration::get('BT_EVENT_SCROLL_DEPTH', true),
             'BT_EVENT_CLICK' => Configuration::get('BT_EVENT_CLICK', true),
             'BT_BUFFER_INTERVAL' => Configuration::get('BT_BUFFER_INTERVAL', 5),
+            'BT_DEBUG_MODE' => Configuration::get('BT_DEBUG_MODE', false),
+            'BT_EVENT_PRODUCT_VIEW' => Configuration::get('BT_EVENT_PRODUCT_VIEW', true),
+            'BT_EVENT_PRODUCT_IMPRESSION' => Configuration::get('BT_EVENT_PRODUCT_IMPRESSION', true),
+            'BT_EVENT_PRODUCT_QUICK_VIEW' => Configuration::get('BT_EVENT_PRODUCT_QUICK_VIEW', true),
+            'BT_EVENT_CART_UPDATE' => Configuration::get('BT_EVENT_CART_UPDATE', true),
+            'BT_EVENT_CART_VIEW' => Configuration::get('BT_EVENT_CART_VIEW', true),
+            'BT_EVENT_CART_QUANTITY_CHANGE' => Configuration::get('BT_EVENT_CART_QUANTITY_CHANGE', true),
+            'BT_EVENT_COUPON_APPLY' => Configuration::get('BT_EVENT_COUPON_APPLY', true),
+            'BT_EVENT_CHECKOUT_START' => Configuration::get('BT_EVENT_CHECKOUT_START', true),
+            'BT_EVENT_CHECKOUT_STEP' => Configuration::get('BT_EVENT_CHECKOUT_STEP', true),
+            'BT_EVENT_SHIPPING_METHOD' => Configuration::get('BT_EVENT_SHIPPING_METHOD', true),
+            'BT_EVENT_PAYMENT_METHOD' => Configuration::get('BT_EVENT_PAYMENT_METHOD', true),
+            'BT_EVENT_PURCHASE_COMPLETED' => Configuration::get('BT_EVENT_PURCHASE_COMPLETED', true),
+            'BT_EVENT_PAYMENT_FAILED' => Configuration::get('BT_EVENT_PAYMENT_FAILED', true),
+            'BT_EVENT_REGISTRATION' => Configuration::get('BT_EVENT_REGISTRATION', true),
+            'BT_EVENT_LOGIN' => Configuration::get('BT_EVENT_LOGIN', true),
+            'BT_EVENT_LOGOUT' => Configuration::get('BT_EVENT_LOGOUT', true),
+            'BT_EVENT_PASSWORD_RESET' => Configuration::get('BT_EVENT_PASSWORD_RESET', true),
+            'BT_EVENT_PROFILE_UPDATE' => Configuration::get('BT_EVENT_PROFILE_UPDATE', true),
+            'BT_EVENT_WISHLIST' => Configuration::get('BT_EVENT_WISHLIST', true),
+            'BT_EVENT_ADDRESS_BOOK' => Configuration::get('BT_EVENT_ADDRESS_BOOK', true),
+            'BT_EVENT_SEARCH_QUERY' => Configuration::get('BT_EVENT_SEARCH_QUERY', true),
+            'BT_EVENT_SEARCH_AUTOCOMPLETE' => Configuration::get('BT_EVENT_SEARCH_AUTOCOMPLETE', true),
+            'BT_EVENT_FILTER_APPLIED' => Configuration::get('BT_EVENT_FILTER_APPLIED', true),
+            'BT_EVENT_SORT_CHANGED' => Configuration::get('BT_EVENT_SORT_CHANGED', true),
+            'BT_EVENT_ZERO_RESULTS' => Configuration::get('BT_EVENT_ZERO_RESULTS', true),
+            'BT_EVENT_NEWSLETTER_SIGNUP' => Configuration::get('BT_EVENT_NEWSLETTER_SIGNUP', true),
+            'BT_EVENT_POPUP_INTERACTION' => Configuration::get('BT_EVENT_POPUP_INTERACTION', true),
+            'BT_EVENT_BANNER_CLICK' => Configuration::get('BT_EVENT_BANNER_CLICK', true),
+            'BT_EVENT_SOCIAL_SHARE' => Configuration::get('BT_EVENT_SOCIAL_SHARE', true),
         );
     }
 
@@ -370,6 +816,12 @@ class BehaviourTracker extends Module
         $this->context->controller->addJS($this->_path . '/views/js/utils/buffer.js');
         $this->context->controller->addJS($this->_path . '/views/js/trackers/session.js');
         $this->context->controller->addJS($this->_path . '/views/js/trackers/navigation.js');
+        $this->context->controller->addJS($this->_path . '/views/js/trackers/product.js');
+        $this->context->controller->addJS($this->_path . '/views/js/trackers/cart.js');
+        $this->context->controller->addJS($this->_path . '/views/js/trackers/checkout.js');
+        $this->context->controller->addJS($this->_path . '/views/js/trackers/account.js');
+        $this->context->controller->addJS($this->_path . '/views/js/trackers/search.js');
+        $this->context->controller->addJS($this->_path . '/views/js/trackers/marketing.js');
     }
 
     public function hookDisplayHeader()

@@ -5,11 +5,14 @@
 const BehaviourTrackerBuffer = {
     buffer: [],
     config: {
-        interval: 5000, // Default 5 seconds
-        batchSize: 20,  // Default batch size
-        webhookUrl: ''
+        interval: 10000, // Default 10 seconds (safer default)
+        batchSize: 50,   // Increased batch size
+        webhookUrl: '',
+        maxBuffer: 500,  // Max events to hold in memory
+        retryAttempts: 3 // Retry failed batches
     },
     timer: null,
+    isFlushing: false,
 
     /**
      * Initialize the buffer
@@ -18,11 +21,17 @@ const BehaviourTrackerBuffer = {
     init: function (config = {}) {
         // Merge defaults with provided config
         if (config.BT_BUFFER_INTERVAL) {
-            this.config.interval = parseInt(config.BT_BUFFER_INTERVAL, 10) * 1000;
+            let interval = parseInt(config.BT_BUFFER_INTERVAL, 10);
+            if (isNaN(interval) || interval < 1) interval = 10; // Enforce minimum 1s
+            this.config.interval = interval * 1000;
         }
+
         if (typeof behaviourTrackerWebhookUrl !== 'undefined') {
             this.config.webhookUrl = behaviourTrackerWebhookUrl;
         }
+
+        // Add debug mode
+        this.debug = config.BT_DEBUG_MODE === '1';
 
         // Start the timer
         this.startTimer();
@@ -32,7 +41,7 @@ const BehaviourTrackerBuffer = {
             this.handleUnload();
         });
 
-        BehaviourTrackerLogger.log('Buffer initialized with interval: ' + this.config.interval + 'ms');
+        if (this.debug) BehaviourTrackerLogger.log('Buffer initialized with interval: ' + this.config.interval + 'ms');
     },
 
     /**
@@ -50,11 +59,18 @@ const BehaviourTrackerBuffer = {
      * @param {object} eventData 
      */
     add: function (eventData) {
+        if (this.buffer.length >= this.config.maxBuffer) {
+            // Drop oldest event if buffer full (prevent memory leak)
+            this.buffer.shift();
+            if (this.debug) BehaviourTrackerLogger.warn('Buffer full, dropping oldest event');
+        }
+
         this.buffer.push(eventData);
-        BehaviourTrackerLogger.log('Event added to buffer', eventData);
+        if (this.debug) BehaviourTrackerLogger.log('Event added. Buffer size: ' + this.buffer.length);
 
         // Optional: Flush immediately if buffer gets too full
         if (this.buffer.length >= this.config.batchSize) {
+            if (this.debug) BehaviourTrackerLogger.log('Batch size reached, flushing...');
             this.flush();
         }
     },
@@ -63,10 +79,17 @@ const BehaviourTrackerBuffer = {
      * Flush buffer to server
      */
     flush: function () {
-        if (this.buffer.length === 0) return;
+        if (this.buffer.length === 0 || this.isFlushing) return;
 
+        this.isFlushing = true;
+
+        // Take a snapshot of current buffer
         const eventsToSend = [...this.buffer];
-        this.buffer = []; // Clear buffer immediately
+        // DO NOT clear buffer yet. Wait for success or use optimistic sending with retry queue.
+        // Simple approach: Clear buffer now, but in real app use persistent queue.
+        // For this user: we clear now to avoid duplicate sending if fetch is slow.
+        // If fetch fails, we re-add them.
+        this.buffer = [];
 
         this.sendBatch(eventsToSend);
     },
@@ -74,14 +97,16 @@ const BehaviourTrackerBuffer = {
     /**
      * Send batch of events
      * @param {Array} events 
+     * @param {number} retryCount 
      */
-    sendBatch: function (events) {
+    sendBatch: function (events, retryCount = 0) {
         if (!this.config.webhookUrl) {
             BehaviourTrackerLogger.error('Webhook URL not defined.');
+            this.isFlushing = false;
             return;
         }
 
-        BehaviourTrackerLogger.log(`Flushing ${events.length} events to server...`);
+        if (this.debug) BehaviourTrackerLogger.log(`Flushing ${events.length} events to server...`);
 
         fetch(this.config.webhookUrl, {
             method: 'POST',
@@ -93,9 +118,24 @@ const BehaviourTrackerBuffer = {
                 batch_timestamp: new Date().toISOString(),
                 events: events
             })
+        }).then(() => {
+            // Success (or opaque response)
+            this.isFlushing = false;
+            if (this.debug) BehaviourTrackerLogger.log('Batch sent successfully');
         }).catch(err => {
             BehaviourTrackerLogger.error('Failed to send event batch', err);
-            // Optional: Retry logic or put back in buffer (careful of loop)
+
+            // Retry logic
+            if (retryCount < this.config.retryAttempts) {
+                setTimeout(() => {
+                    this.sendBatch(events, retryCount + 1);
+                }, 2000 * (retryCount + 1)); // Exponential backoffish
+            } else {
+                // Give up, maybe re-add to buffer? 
+                // Careful: this changes order and might cause infinite loops if persistent error.
+                // For now, accept loss after retries to keep complexity low.
+                this.isFlushing = false;
+            }
         });
     },
 
@@ -112,18 +152,25 @@ const BehaviourTrackerBuffer = {
         });
 
         if (navigator.sendBeacon && this.config.webhookUrl) {
-            navigator.sendBeacon(this.config.webhookUrl, payload);
-            BehaviourTrackerLogger.log('Sent remaining events via Beacon');
+            const success = navigator.sendBeacon(this.config.webhookUrl, payload);
+            if (!success) {
+                // Determine if we should fallback? usually sendBeacon returns false if queue full or data too big
+                // Fallback to synchronous XHR or fetch keepalive
+                this.fallbackUnload(payload);
+            }
         } else {
-            // Fallback for older browsers (might not complete)
-            fetch(this.config.webhookUrl, {
-                method: 'POST',
-                mode: 'no-cors',
-                headers: { 'Content-Type': 'application/json' },
-                body: payload,
-                keepalive: true // Important for unload
-            });
+            this.fallbackUnload(payload);
         }
+    },
+
+    fallbackUnload: function (payload) {
+        fetch(this.config.webhookUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: payload,
+            keepalive: true
+        });
     }
 };
 

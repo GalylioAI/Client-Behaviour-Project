@@ -101,7 +101,7 @@ const BehaviourTrackerNavigation = {
         }
 
         document.addEventListener('click', (e) => {
-            const target = e.target.closest('a, button, .btn');
+            const target = e.target.closest('a, button, input[type="submit"], input[type="button"], [role="button"], .btn, .button, .cta');
             if (target) {
                 this.sendClickEvent(target, e);
             }
