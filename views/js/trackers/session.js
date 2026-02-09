@@ -144,22 +144,15 @@ const BehaviourTrackerSession = {
     /**
      * Send Data
      */
+    /**
+     * Send Data (Delegated to Buffer)
+     */
     sendData: function (data) {
-        if (typeof behaviourTrackerWebhookUrl === 'undefined' || behaviourTrackerWebhookUrl === '') {
-            BehaviourTrackerLogger.error('Webhook URL not defined.');
-            return;
+        if (typeof BehaviourTrackerBuffer !== 'undefined') {
+            BehaviourTrackerBuffer.add(data);
+        } else {
+            BehaviourTrackerLogger.error('BehaviourTrackerBuffer not defined.');
         }
-
-        BehaviourTrackerLogger.log('Sending Session Data:', data);
-
-        fetch(behaviourTrackerWebhookUrl, {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(data)
-        }).catch(err => BehaviourTrackerLogger.error('Failed to send session data', err));
     }
 };
 

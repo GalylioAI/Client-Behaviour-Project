@@ -72,6 +72,7 @@ class BehaviourTracker extends Module
         Configuration::updateValue('BT_EVENT_SESSION_END', true);
         Configuration::updateValue('BT_EVENT_SCROLL_DEPTH', true);
         Configuration::updateValue('BT_EVENT_CLICK', true);
+        Configuration::updateValue('BT_BUFFER_INTERVAL', 5); // Default 5 seconds
         return true;
     }
 
@@ -86,7 +87,9 @@ class BehaviourTracker extends Module
         Configuration::deleteByName('BT_EVENT_SESSION_START');
         Configuration::deleteByName('BT_EVENT_SESSION_END');
         Configuration::deleteByName('BT_EVENT_SCROLL_DEPTH');
+        Configuration::deleteByName('BT_EVENT_SCROLL_DEPTH');
         Configuration::deleteByName('BT_EVENT_CLICK');
+        Configuration::deleteByName('BT_BUFFER_INTERVAL');
 
         return parent::uninstall();
     }
@@ -155,6 +158,15 @@ class BehaviourTracker extends Module
                                 array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
                                 array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
                             ),
+                        ),
+
+                        // Buffer Configuration
+                        array(
+                            'type' => 'text',
+                            'label' => $this->l('Buffer Interval (seconds)'),
+                            'name' => 'BT_BUFFER_INTERVAL',
+                            'desc' => $this->l('Time in seconds to buffer events before sending to server.'),
+                            'class' => 'fixed-width-sm',
                         ),
 
                         // Header: PAGE_VIEW
@@ -306,7 +318,9 @@ class BehaviourTracker extends Module
             'BT_EVENT_SESSION_START' => Configuration::get('BT_EVENT_SESSION_START', true),
             'BT_EVENT_SESSION_END' => Configuration::get('BT_EVENT_SESSION_END', true),
             'BT_EVENT_SCROLL_DEPTH' => Configuration::get('BT_EVENT_SCROLL_DEPTH', true),
+            'BT_EVENT_SCROLL_DEPTH' => Configuration::get('BT_EVENT_SCROLL_DEPTH', true),
             'BT_EVENT_CLICK' => Configuration::get('BT_EVENT_CLICK', true),
+            'BT_BUFFER_INTERVAL' => Configuration::get('BT_BUFFER_INTERVAL', 5),
         );
     }
 
@@ -353,6 +367,7 @@ class BehaviourTracker extends Module
         ]);
 
         $this->context->controller->addJS($this->_path . '/views/js/utils/logger.js');
+        $this->context->controller->addJS($this->_path . '/views/js/utils/buffer.js');
         $this->context->controller->addJS($this->_path . '/views/js/trackers/session.js');
         $this->context->controller->addJS($this->_path . '/views/js/trackers/navigation.js');
     }
