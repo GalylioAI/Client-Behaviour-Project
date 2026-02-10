@@ -85,6 +85,7 @@ const BehaviourTrackerSession = {
 
         const data = {
             event: 'session_start',
+            event_type: 'USER SESSION & NAVIGATION EVENTS',
             timestamp: new Date().toISOString(),
             session_id: this.sessionId,
             customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
@@ -115,6 +116,7 @@ const BehaviourTrackerSession = {
         // This is best effort. navigate.sendBeacon is better for unload.
         const data = {
             event: 'session_end', // This is technically page unload, but can signal end if no more events come
+            event_type: 'USER SESSION & NAVIGATION EVENTS',
             timestamp: new Date().toISOString(),
             session_id: this.sessionId,
             customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
@@ -158,5 +160,13 @@ const BehaviourTrackerSession = {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function () {
+    // Check if this section is enabled
+    if (typeof bt_config !== 'undefined' &&
+        bt_config.BT_ENABLED_SECTIONS &&
+        bt_config.BT_ENABLED_SECTIONS.session_navigation === false) {
+        BehaviourTrackerLogger.log('Session/Navigation tracker section is disabled in config.php');
+        return;
+    }
+
     BehaviourTrackerSession.init();
 });

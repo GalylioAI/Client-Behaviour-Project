@@ -795,8 +795,34 @@ class BehaviourTracker extends Module
             } else {
                 $config['BT_BUFFER_INTERVAL'] = 10; // default
             }
+
+            // Get enabled sections from config (default to all enabled)
+            if (isset($externalConfig['enabled_sections']) && is_array($externalConfig['enabled_sections'])) {
+                $config['BT_ENABLED_SECTIONS'] = $externalConfig['enabled_sections'];
+            } else {
+                // Default: all sections enabled
+                $config['BT_ENABLED_SECTIONS'] = [
+                    'session_navigation' => true,
+                    'product' => true,
+                    'cart' => true,
+                    'checkout' => true,
+                    'account' => true,
+                    'search' => true,
+                    'marketing' => true,
+                ];
+            }
         } else {
             $config['BT_BUFFER_INTERVAL'] = 10; // default if config.php doesn't exist
+            // Default: all sections enabled
+            $config['BT_ENABLED_SECTIONS'] = [
+                'session_navigation' => true,
+                'product' => true,
+                'cart' => true,
+                'checkout' => true,
+                'account' => true,
+                'search' => true,
+                'marketing' => true,
+            ];
         }
 
         // Define variables in JS

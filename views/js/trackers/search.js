@@ -27,6 +27,7 @@ const BehaviourTrackerSearch = {
                 if (searchTerm) {
                     const data = {
                         event: 'search_query',
+                        event_type: 'SEARCH & FILTER EVENTS',
                         timestamp: new Date().toISOString(),
                         session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                         customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
@@ -53,6 +54,7 @@ const BehaviourTrackerSearch = {
 
                 const data = {
                     event: 'search_autocomplete_click',
+                    event_type: 'SEARCH & FILTER EVENTS',
                     timestamp: new Date().toISOString(),
                     session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                     customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
@@ -78,6 +80,7 @@ const BehaviourTrackerSearch = {
 
                 const data = {
                     event: 'filter_applied',
+                    event_type: 'SEARCH & FILTER EVENTS',
                     timestamp: new Date().toISOString(),
                     session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                     customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
@@ -104,6 +107,7 @@ const BehaviourTrackerSearch = {
 
                 const data = {
                     event: 'sort_changed',
+                    event_type: 'SEARCH & FILTER EVENTS',
                     timestamp: new Date().toISOString(),
                     session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                     customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
@@ -130,6 +134,7 @@ const BehaviourTrackerSearch = {
             if (searchTerm) {
                 const data = {
                     event: 'search_zero_results',
+                    event_type: 'SEARCH & FILTER EVENTS',
                     timestamp: new Date().toISOString(),
                     session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                     customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
@@ -154,5 +159,13 @@ const BehaviourTrackerSearch = {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function () {
+    // Check if this section is enabled
+    if (typeof bt_config !== 'undefined' &&
+        bt_config.BT_ENABLED_SECTIONS &&
+        bt_config.BT_ENABLED_SECTIONS.search === false) {
+        BehaviourTrackerLogger.log('Search tracker section is disabled in config.php');
+        return;
+    }
+
     BehaviourTrackerSearch.init();
 });

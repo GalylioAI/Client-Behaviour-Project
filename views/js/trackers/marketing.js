@@ -23,6 +23,7 @@ const BehaviourTrackerMarketing = {
 
                 const data = {
                     event: 'newsletter_signup',
+                    event_type: 'MARKETING & PROMOTIONAL EVENTS',
                     timestamp: new Date().toISOString(),
                     session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                     customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
@@ -49,6 +50,7 @@ const BehaviourTrackerMarketing = {
 
                         const data = {
                             event: 'popup_opened',
+                            event_type: 'MARKETING & PROMOTIONAL EVENTS',
                             timestamp: new Date().toISOString(),
                             session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                             popup_id: popupId
@@ -76,6 +78,7 @@ const BehaviourTrackerMarketing = {
 
                 const data = {
                     event: 'banner_click',
+                    event_type: 'MARKETING & PROMOTIONAL EVENTS',
                     timestamp: new Date().toISOString(),
                     session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                     banner_id: bannerId,
@@ -99,6 +102,7 @@ const BehaviourTrackerMarketing = {
 
                 const data = {
                     event: 'social_share',
+                    event_type: 'MARKETING & PROMOTIONAL EVENTS',
                     timestamp: new Date().toISOString(),
                     session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                     platform: platform,
@@ -123,5 +127,13 @@ const BehaviourTrackerMarketing = {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function () {
+    // Check if this section is enabled
+    if (typeof bt_config !== 'undefined' &&
+        bt_config.BT_ENABLED_SECTIONS &&
+        bt_config.BT_ENABLED_SECTIONS.marketing === false) {
+        BehaviourTrackerLogger.log('Marketing tracker section is disabled in config.php');
+        return;
+    }
+
     BehaviourTrackerMarketing.init();
 });

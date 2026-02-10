@@ -22,6 +22,7 @@ const BehaviourTrackerNavigation = {
         // Wait for session to be initialized if needed, though usually sync
         const data = {
             event: 'page_view',
+            event_type: 'USER SESSION & NAVIGATION EVENTS',
             timestamp: new Date().toISOString(),
             session_id: BehaviourTrackerSession.getOrCreateSessionId(),
             customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
@@ -82,6 +83,7 @@ const BehaviourTrackerNavigation = {
     sendScrollEvent: function (percentage) {
         const data = {
             event: 'scroll_depth',
+            event_type: 'USER SESSION & NAVIGATION EVENTS',
             timestamp: new Date().toISOString(),
             session_id: BehaviourTrackerSession.getOrCreateSessionId(),
             page_url: window.location.pathname,
@@ -111,6 +113,7 @@ const BehaviourTrackerNavigation = {
     sendClickEvent: function (element, event) {
         const data = {
             event: 'click',
+            event_type: 'USER SESSION & NAVIGATION EVENTS',
             timestamp: new Date().toISOString(),
             session_id: BehaviourTrackerSession.getOrCreateSessionId(),
             page_url: window.location.pathname,
@@ -156,5 +159,13 @@ const BehaviourTrackerNavigation = {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function () {
+    // Check if this section is enabled
+    if (typeof bt_config !== 'undefined' &&
+        bt_config.BT_ENABLED_SECTIONS &&
+        bt_config.BT_ENABLED_SECTIONS.session_navigation === false) {
+        BehaviourTrackerLogger.log('Session/Navigation tracker section is disabled in config.php');
+        return;
+    }
+
     BehaviourTrackerNavigation.init();
 });

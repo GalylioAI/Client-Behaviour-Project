@@ -23,6 +23,7 @@ const BehaviourTrackerCheckout = {
         // Get cart data from PrestaShop
         const data = {
             event: 'checkout_start',
+            event_type: 'CHECKOUT & PURCHASE EVENTS',
             timestamp: new Date().toISOString(),
             session_id: BehaviourTrackerSession.getOrCreateSessionId(),
             customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
@@ -60,6 +61,7 @@ const BehaviourTrackerCheckout = {
     sendStepCompleted: function (stepName, stepNumber) {
         const data = {
             event: 'checkout_step_completed',
+            event_type: 'CHECKOUT & PURCHASE EVENTS',
             timestamp: new Date().toISOString(),
             session_id: BehaviourTrackerSession.getOrCreateSessionId(),
             customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
@@ -85,6 +87,7 @@ const BehaviourTrackerCheckout = {
 
                     const data = {
                         event: 'checkout_shipping_method_selected',
+                        event_type: 'CHECKOUT & PURCHASE EVENTS',
                         timestamp: new Date().toISOString(),
                         session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                         customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
@@ -110,6 +113,7 @@ const BehaviourTrackerCheckout = {
 
                 const data = {
                     event: 'checkout_payment_method_selected',
+                    event_type: 'CHECKOUT & PURCHASE EVENTS',
                     timestamp: new Date().toISOString(),
                     session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                     customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
@@ -135,6 +139,7 @@ const BehaviourTrackerCheckout = {
 
         const data = {
             event: 'purchase_completed',
+            event_type: 'CHECKOUT & PURCHASE EVENTS',
             timestamp: new Date().toISOString(),
             session_id: BehaviourTrackerSession.getOrCreateSessionId(),
             customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
@@ -162,6 +167,7 @@ const BehaviourTrackerCheckout = {
 
                         const data = {
                             event: 'payment_failed',
+                            event_type: 'CHECKOUT & PURCHASE EVENTS',
                             timestamp: new Date().toISOString(),
                             session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                             customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
@@ -191,5 +197,13 @@ const BehaviourTrackerCheckout = {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function () {
+    // Check if this section is enabled
+    if (typeof bt_config !== 'undefined' &&
+        bt_config.BT_ENABLED_SECTIONS &&
+        bt_config.BT_ENABLED_SECTIONS.checkout === false) {
+        BehaviourTrackerLogger.log('Checkout tracker section is disabled in config.php');
+        return;
+    }
+
     BehaviourTrackerCheckout.init();
 });

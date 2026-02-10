@@ -28,6 +28,7 @@ const BehaviourTrackerAccount = {
 
                 const data = {
                     event: 'account_registration',
+                    event_type: 'USER ACCOUNT EVENTS',
                     timestamp: new Date().toISOString(),
                     session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                     customer_email: email,
@@ -53,6 +54,7 @@ const BehaviourTrackerAccount = {
 
                 const data = {
                     event: 'login',
+                    event_type: 'USER ACCOUNT EVENTS',
                     timestamp: new Date().toISOString(),
                     session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                     customer_email: email,
@@ -74,6 +76,7 @@ const BehaviourTrackerAccount = {
             if (logoutLink) {
                 const data = {
                     event: 'logout',
+                    event_type: 'USER ACCOUNT EVENTS',
                     timestamp: new Date().toISOString(),
                     session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                     customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : null
@@ -97,6 +100,7 @@ const BehaviourTrackerAccount = {
 
                 const data = {
                     event: 'password_reset_request',
+                    event_type: 'USER ACCOUNT EVENTS',
                     timestamp: new Date().toISOString(),
                     session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                     customer_email: email
@@ -119,6 +123,7 @@ const BehaviourTrackerAccount = {
             form.addEventListener('submit', (e) => {
                 const data = {
                     event: 'profile_update',
+                    event_type: 'USER ACCOUNT EVENTS',
                     timestamp: new Date().toISOString(),
                     session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                     customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : null
@@ -142,6 +147,7 @@ const BehaviourTrackerAccount = {
 
                 const data = {
                     event: action,
+                    event_type: 'USER ACCOUNT EVENTS',
                     timestamp: new Date().toISOString(),
                     session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                     customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : null,
@@ -168,6 +174,7 @@ const BehaviourTrackerAccount = {
 
                 const data = {
                     event: 'address_book_add',
+                    event_type: 'USER ACCOUNT EVENTS',
                     timestamp: new Date().toISOString(),
                     session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                     customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : null,
@@ -193,5 +200,13 @@ const BehaviourTrackerAccount = {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function () {
+    // Check if this section is enabled
+    if (typeof bt_config !== 'undefined' &&
+        bt_config.BT_ENABLED_SECTIONS &&
+        bt_config.BT_ENABLED_SECTIONS.account === false) {
+        BehaviourTrackerLogger.log('Account tracker section is disabled in config.php');
+        return;
+    }
+
     BehaviourTrackerAccount.init();
 });

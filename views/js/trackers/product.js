@@ -30,6 +30,7 @@ const BehaviourTrackerProduct = {
 
         const data = {
             event: 'product_view',
+            event_type: 'PRODUCT DISCOVERY EVENTS',
             timestamp: new Date().toISOString(),
             session_id: BehaviourTrackerSession.getOrCreateSessionId(),
             product_id: productId,
@@ -70,6 +71,7 @@ const BehaviourTrackerProduct = {
         if (productList.length > 0) {
             const data = {
                 event: 'product_impression',
+                event_type: 'PRODUCT DISCOVERY EVENTS',
                 timestamp: new Date().toISOString(),
                 session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                 products: productList, // May be large, buffer handles it
@@ -98,6 +100,7 @@ const BehaviourTrackerProduct = {
 
         const data = {
             event: 'product_quick_view',
+            event_type: 'PRODUCT DISCOVERY EVENTS',
             timestamp: new Date().toISOString(),
             session_id: BehaviourTrackerSession.getOrCreateSessionId(),
             // Try to find product ID from parent container
@@ -119,6 +122,7 @@ const BehaviourTrackerProduct = {
 
                     const data = {
                         event: 'product_comparison_add',
+                        event_type: 'PRODUCT DISCOVERY EVENTS',
                         timestamp: new Date().toISOString(),
                         session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                         product_id: productId
@@ -138,6 +142,7 @@ const BehaviourTrackerProduct = {
 
                     const data = {
                         event: 'product_zoom',
+                        event_type: 'PRODUCT DISCOVERY EVENTS',
                         timestamp: new Date().toISOString(),
                         session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                         product_id: productId
@@ -157,6 +162,7 @@ const BehaviourTrackerProduct = {
 
                     const data = {
                         event: 'product_review_read',
+                        event_type: 'PRODUCT DISCOVERY EVENTS',
                         timestamp: new Date().toISOString(),
                         session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                         product_id: productId
@@ -181,5 +187,13 @@ const BehaviourTrackerProduct = {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function () {
+    // Check if this section is enabled
+    if (typeof bt_config !== 'undefined' &&
+        bt_config.BT_ENABLED_SECTIONS &&
+        bt_config.BT_ENABLED_SECTIONS.product === false) {
+        BehaviourTrackerLogger.log('Product tracker section is disabled in config.php');
+        return;
+    }
+
     BehaviourTrackerProduct.init();
 });

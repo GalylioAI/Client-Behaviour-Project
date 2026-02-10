@@ -38,6 +38,7 @@ const BehaviourTrackerCart = {
             if (event && event.reason) {
                 const data = {
                     event: 'cart_update', // Generic update, can be refined based on reason
+                    event_type: 'SHOPPING CART EVENTS',
                     timestamp: new Date().toISOString(),
                     session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                     reason: event.reason,
@@ -65,6 +66,7 @@ const BehaviourTrackerCart = {
 
             const data = {
                 event: 'cart_view',
+                event_type: 'SHOPPING CART EVENTS',
                 timestamp: new Date().toISOString(),
                 session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                 page_url: window.location.href
@@ -84,6 +86,7 @@ const BehaviourTrackerCart = {
             if (qtyInput) {
                 const data = {
                     event: 'cart_quantity_change',
+                    event_type: 'SHOPPING CART EVENTS',
                     timestamp: new Date().toISOString(),
                     session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                     new_quantity: qtyInput.value
@@ -109,6 +112,7 @@ const BehaviourTrackerCart = {
                 if (couponCode) {
                     const data = {
                         event: 'apply_coupon',
+                        event_type: 'SHOPPING CART EVENTS',
                         timestamp: new Date().toISOString(),
                         session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                         coupon_code: couponCode
@@ -124,6 +128,7 @@ const BehaviourTrackerCart = {
             if (removeBtn) {
                 const data = {
                     event: 'remove_coupon',
+                    event_type: 'SHOPPING CART EVENTS',
                     timestamp: new Date().toISOString(),
                     session_id: BehaviourTrackerSession.getOrCreateSessionId()
                 };
@@ -154,5 +159,13 @@ const BehaviourTrackerCart = {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function () {
+    // Check if this section is enabled
+    if (typeof bt_config !== 'undefined' &&
+        bt_config.BT_ENABLED_SECTIONS &&
+        bt_config.BT_ENABLED_SECTIONS.cart === false) {
+        BehaviourTrackerLogger.log('Cart tracker section is disabled in config.php');
+        return;
+    }
+
     BehaviourTrackerCart.init();
 });
