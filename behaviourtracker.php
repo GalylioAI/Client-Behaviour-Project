@@ -72,7 +72,6 @@ class BehaviourTracker extends Module
         Configuration::updateValue('BT_EVENT_SESSION_END', true);
         Configuration::updateValue('BT_EVENT_SCROLL_DEPTH', true);
         Configuration::updateValue('BT_EVENT_CLICK', true);
-        Configuration::updateValue('BT_BUFFER_INTERVAL', 5); // Default 5 seconds
         Configuration::updateValue('BT_DEBUG_MODE', false);
 
         // Product Events
@@ -132,7 +131,6 @@ class BehaviourTracker extends Module
         Configuration::deleteByName('BT_EVENT_SCROLL_DEPTH');
         Configuration::deleteByName('BT_EVENT_SCROLL_DEPTH');
         Configuration::deleteByName('BT_EVENT_CLICK');
-        Configuration::deleteByName('BT_BUFFER_INTERVAL');
         Configuration::deleteByName('BT_DEBUG_MODE');
         Configuration::deleteByName('BT_EVENT_PRODUCT_VIEW');
         Configuration::deleteByName('BT_EVENT_PRODUCT_IMPRESSION');
@@ -231,15 +229,6 @@ class BehaviourTracker extends Module
                                 array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
                                 array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
                             ),
-                        ),
-
-                        // Buffer Configuration
-                        array(
-                            'type' => 'text',
-                            'label' => $this->l('Buffer Interval (seconds)'),
-                            'name' => 'BT_BUFFER_INTERVAL',
-                            'desc' => $this->l('Time in seconds to buffer events before sending to server.'),
-                            'class' => 'fixed-width-sm',
                         ),
                         array(
                             'type' => 'switch',
@@ -736,7 +725,6 @@ class BehaviourTracker extends Module
             'BT_EVENT_SCROLL_DEPTH' => Configuration::get('BT_EVENT_SCROLL_DEPTH', true),
             'BT_EVENT_SCROLL_DEPTH' => Configuration::get('BT_EVENT_SCROLL_DEPTH', true),
             'BT_EVENT_CLICK' => Configuration::get('BT_EVENT_CLICK', true),
-            'BT_BUFFER_INTERVAL' => Configuration::get('BT_BUFFER_INTERVAL', 5),
             'BT_DEBUG_MODE' => Configuration::get('BT_DEBUG_MODE', false),
             'BT_EVENT_PRODUCT_VIEW' => Configuration::get('BT_EVENT_PRODUCT_VIEW', true),
             'BT_EVENT_PRODUCT_IMPRESSION' => Configuration::get('BT_EVENT_PRODUCT_IMPRESSION', true),
@@ -801,6 +789,14 @@ class BehaviourTracker extends Module
             if (is_array($externalConfig) && isset($externalConfig['webhook_url'])) {
                 $webhookUrl = $externalConfig['webhook_url'];
             }
+            // Get buffer interval from config (default to 10 if not set)
+            if (isset($externalConfig['buffer_interval'])) {
+                $config['BT_BUFFER_INTERVAL'] = (int) $externalConfig['buffer_interval'];
+            } else {
+                $config['BT_BUFFER_INTERVAL'] = 10; // default
+            }
+        } else {
+            $config['BT_BUFFER_INTERVAL'] = 10; // default if config.php doesn't exist
         }
 
         // Define variables in JS

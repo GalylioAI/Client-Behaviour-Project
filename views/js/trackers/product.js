@@ -107,6 +107,67 @@ const BehaviourTrackerProduct = {
     },
 
     /**
+     * Initialize Advanced Tracking
+     */
+    initAdvancedTracking: function () {
+        // Product Comparison
+        if (typeof bt_config === 'undefined' || bt_config.BT_EVENT_PRODUCT_COMPARISON != '0') {
+            document.body.addEventListener('click', (e) => {
+                const compareBtn = e.target.closest('.compare, [data-action="add-to-compare"]');
+                if (compareBtn) {
+                    const productId = compareBtn.dataset.idProduct || compareBtn.closest('[data-id-product]')?.dataset.idProduct;
+
+                    const data = {
+                        event: 'product_comparison_add',
+                        timestamp: new Date().toISOString(),
+                        session_id: BehaviourTrackerSession.getOrCreateSessionId(),
+                        product_id: productId
+                    };
+                    this.sendData(data);
+                }
+            });
+        }
+
+        // Image Zoom
+        if (typeof bt_config === 'undefined' || bt_config.BT_EVENT_PRODUCT_ZOOM != '0') {
+            document.body.addEventListener('click', (e) => {
+                const zoomBtn = e.target.closest('.js-zoom, [data-zoom]');
+                if (zoomBtn) {
+                    const productIdInput = document.querySelector('#product_page_product_id');
+                    const productId = productIdInput ? productIdInput.value : null;
+
+                    const data = {
+                        event: 'product_zoom',
+                        timestamp: new Date().toISOString(),
+                        session_id: BehaviourTrackerSession.getOrCreateSessionId(),
+                        product_id: productId
+                    };
+                    this.sendData(data);
+                }
+            });
+        }
+
+        // Review Tab Click
+        if (typeof bt_config === 'undefined' || bt_config.BT_EVENT_PRODUCT_REVIEW_READ != '0') {
+            document.body.addEventListener('click', (e) => {
+                const reviewTab = e.target.closest('[href="#product-review"], .reviews-tab');
+                if (reviewTab) {
+                    const productIdInput = document.querySelector('#product_page_product_id');
+                    const productId = productIdInput ? productIdInput.value : null;
+
+                    const data = {
+                        event: 'product_review_read',
+                        timestamp: new Date().toISOString(),
+                        session_id: BehaviourTrackerSession.getOrCreateSessionId(),
+                        product_id: productId
+                    };
+                    this.sendData(data);
+                }
+            });
+        }
+    },
+
+    /**
      * Send Data (Delegated to Buffer)
      */
     sendData: function (data) {
