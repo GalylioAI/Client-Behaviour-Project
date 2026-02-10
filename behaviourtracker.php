@@ -35,7 +35,7 @@ class BehaviourTracker extends Module
         $this->name = 'behaviourtracker';
         $this->tab = 'analytics_stats';
         $this->version = '1.0.0';
-        $this->author = 'Antigravity';
+        $this->author = 'Galylio';
         $this->need_instance = 0;
         $this->ps_versions_compliancy = [
             'min' => '1.7',
@@ -46,7 +46,7 @@ class BehaviourTracker extends Module
         parent::__construct();
 
         $this->displayName = $this->l('Customer Behaviour Tracker');
-        $this->description = $this->l('Tracks page views and sends data to a webhook for analysis.');
+        $this->description = $this->l('Tracks customer behaviour and sends data to a webhook for analysis.');
 
         $this->confirmUninstall = $this->l('Are you sure you want to uninstall?');
     }
