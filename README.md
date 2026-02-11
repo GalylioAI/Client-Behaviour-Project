@@ -22,7 +22,7 @@ A comprehensive behavior tracking plugin for WordPress/WooCommerce that tracks u
 ## Configuration
 
 Edit `config.php` to set:
-- **webhook_url**: Your webhook endpoint
+- **webhook_url**: Your webhook endpoint 
 - **buffer_interval**: How often to send batched events (seconds)
 - **enabled_sections**: Master toggles for each tracking category
 
