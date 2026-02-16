@@ -232,7 +232,7 @@ class BehaviourTrackerWordPress
     /**
      * Get all setting keys
      */
-    private function get_all_setting_keys()
+    public function get_all_setting_keys()
     {
         return array(
             'bt_sec_session_nav',
