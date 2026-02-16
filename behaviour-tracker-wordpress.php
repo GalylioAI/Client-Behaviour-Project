@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Behaviour Tracker for WordPress
- * Plugin URI: https://github.com/yourusername/behaviour-tracker-wordpress
+ * Plugin URI: https://github.com/GalylioAI/Client-Behaviour-Project/tree/wp
  * Description: Tracks customer behaviour and sends data to a webhook for analysis. WordPress/WooCommerce Behaviour Tracker.
  * Version: 1.0.0
  * Author: Galylio
