@@ -1,0 +1,8 @@
+tunnel: 35fc8812-799d-4d9b-960a-177e6ee45803
+credentials-file: /home/iyed/.cloudflared/35fc8812-799d-4d9b-960a-177e6ee45803.json
+
+ingress:
+  - hostname: yatootunisie.tn
+    service: http://localhost:8000
+  - service: http_status:404
+
