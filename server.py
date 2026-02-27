@@ -1,11 +1,43 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 import json
+import os
 from datetime import datetime
 
 app = FastAPI()
 
+# Allow all origins so the tracker JS can POST webhooks
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 connected_clients = []
+
+# ─── Local JSON storage ───
+DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+os.makedirs(DATA_DIR, exist_ok=True)
+
+# Resume counter from existing files so numbering is continuous across restarts
+def _get_next_counter():
+    existing = [int(f.split(".")[0]) for f in os.listdir(DATA_DIR) if f.endswith(".json") and f.split(".")[0].isdigit()]
+    return max(existing, default=0) + 1
+
+event_counter = _get_next_counter()
+
+
+def save_event(event_data):
+    """Save a single event as a numbered JSON file."""
+    global event_counter
+    filepath = os.path.join(DATA_DIR, f"{event_counter}.json")
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(event_data, f, indent=2, ensure_ascii=False)
+    event_counter += 1
+    return filepath
 
 
 @app.post("/webhook")
@@ -13,19 +45,51 @@ async def webhook(request: Request):
     data = await request.json()
     timestamp = datetime.now().isoformat()
 
-    payload = {
-        "data": data,
-        "received_at": timestamp,
-    }
+    # Unwrap batched events: { batch_timestamp, events: [...] }
+    if "events" in data and isinstance(data["events"], list):
+        events = data["events"]
+    else:
+        # Single event payload
+        events = [data]
 
-    # Send new webhook to all connected browsers
-    for client in connected_clients:
-        try:
-            await client.send_text(json.dumps(payload))
-        except Exception:
+    disconnected = []
+    for event in events:
+        payload = {
+            "data": event,
+            "received_at": event.get("timestamp", timestamp),
+        }
+
+        # Save to local JSON file
+        save_event(payload)
+
+        msg = json.dumps(payload)
+        for client in connected_clients:
+            try:
+                await client.send_text(msg)
+            except Exception:
+                disconnected.append(client)
+
+    # Clean up disconnected clients
+    for client in disconnected:
+        if client in connected_clients:
             connected_clients.remove(client)
 
     return {"status": "received"}
+
+
+@app.get("/api/events")
+async def get_events():
+    """Return all saved events, sorted by file number."""
+    files = [f for f in os.listdir(DATA_DIR) if f.endswith(".json") and f.split(".")[0].isdigit()]
+    files.sort(key=lambda f: int(f.split(".")[0]))
+    events = []
+    for f in files:
+        try:
+            with open(os.path.join(DATA_DIR, f), "r", encoding="utf-8") as fh:
+                events.append(json.load(fh))
+        except Exception:
+            pass
+    return events
 
 
 @app.websocket("/ws")
@@ -655,7 +719,8 @@ async def home():
         let reconnectTimer;
 
         function connectWS() {
-            ws = new WebSocket("ws://" + location.host + "/ws");
+            const wsProto = location.protocol === "https:" ? "wss://" : "ws://";
+            ws = new WebSocket(wsProto + location.host + "/ws");
 
             ws.onopen = () => {
                 const badge = document.getElementById("connectionBadge");
@@ -689,8 +754,27 @@ async def home():
 
         connectWS();
 
+        // ─── Load saved history on page load ───
+        async function loadHistory() {
+            try {
+                const res = await fetch("/api/events");
+                const events = await res.json();
+                if (events.length > 0) {
+                    const emptyState = document.getElementById("emptyState");
+                    if (emptyState) emptyState.style.display = "none";
+                }
+                // Add oldest first, newest on top
+                events.forEach(ev => {
+                    addEvent(ev.data, ev.received_at, true);
+                });
+            } catch(e) {
+                console.error("Failed to load history", e);
+            }
+        }
+        loadHistory();
+
         // ─── Add Event ─── 
-        function addEvent(data, receivedAt) {
+        function addEvent(data, receivedAt, fromHistory = false) {
             // Hide empty state
             const emptyState = document.getElementById("emptyState");
             if (emptyState) emptyState.style.display = "none";
@@ -708,19 +792,20 @@ async def home():
 
             // Build card
             const card = document.createElement("div");
-            card.className = "event-card";
+            card.className = fromHistory ? "event-card" : "event-card";
+            if (!fromHistory) card.style.animation = "slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1)";
             card.innerHTML = buildCardHTML(data, normalizedName, eventName, receivedAt, eventCount);
 
             // Insert at top
             const feed = document.getElementById("eventsFeed");
             feed.insertBefore(card, feed.firstChild);
 
-            // Keep max 200 events in DOM
-            while (feed.children.length > 201) {
+            // Keep max 500 events in DOM
+            while (feed.children.length > 501) {
                 feed.removeChild(feed.lastChild);
             }
 
-            if (autoScroll) {
+            if (!fromHistory && autoScroll) {
                 window.scrollTo({ top: 0, behavior: "smooth" });
             }
         }
@@ -943,5 +1028,4 @@ async def home():
     </script>
 </body>
 </html>
-"""
 """
