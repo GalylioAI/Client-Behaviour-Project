@@ -111,14 +111,36 @@ const BehaviourTrackerCart = {
      */
     trackCartInteractions: function () {
         // Quantity change
-        jQuery(document.body).on('change', '.qty, input.qty', (e) => {
-            this.trackQuantityChange(e.currentTarget);
-        });
+        (function () {
+            const defaultSelectors = ['.qty', 'input.qty'];
+            const extraSelectors = (typeof bt_config !== 'undefined' &&
+                bt_config.BT_SELECTORS &&
+                Array.isArray(bt_config.BT_SELECTORS.cart_quantity_inputs))
+                ? bt_config.BT_SELECTORS.cart_quantity_inputs
+                : [];
+            const allSelectors = Array.from(new Set(defaultSelectors.concat(extraSelectors)));
+            const selectorString = allSelectors.join(',');
+
+            jQuery(document.body).on('change', selectorString, (e) => {
+                this.trackQuantityChange(e.currentTarget);
+            });
+        }).call(this);
 
         // Coupon apply
-        jQuery(document.body).on('submit', 'form.checkout_coupon, form.woocommerce-form-coupon', (e) => {
-            this.trackCouponApply(e.currentTarget);
-        });
+        (function () {
+            const defaultSelectors = ['form.checkout_coupon', 'form.woocommerce-form-coupon'];
+            const extraSelectors = (typeof bt_config !== 'undefined' &&
+                bt_config.BT_SELECTORS &&
+                Array.isArray(bt_config.BT_SELECTORS.coupon_forms))
+                ? bt_config.BT_SELECTORS.coupon_forms
+                : [];
+            const allSelectors = Array.from(new Set(defaultSelectors.concat(extraSelectors)));
+            const selectorString = allSelectors.join(',');
+
+            jQuery(document.body).on('submit', selectorString, (e) => {
+                this.trackCouponApply(e.currentTarget);
+            });
+        }).call(this);
     },
 
     /**
@@ -174,7 +196,15 @@ const BehaviourTrackerCart = {
         const items = [];
         let totalValue = 0;
 
-        document.querySelectorAll('.cart_item, tr.woocommerce-cart-form__cart-item').forEach(row => {
+        const defaultRowSelectors = ['.cart_item', 'tr.woocommerce-cart-form__cart-item'];
+        const extraRowSelectors = (typeof bt_config !== 'undefined' &&
+            bt_config.BT_SELECTORS &&
+            Array.isArray(bt_config.BT_SELECTORS.cart_rows))
+            ? bt_config.BT_SELECTORS.cart_rows
+            : [];
+        const allRowSelectors = Array.from(new Set(defaultRowSelectors.concat(extraRowSelectors)));
+
+        document.querySelectorAll(allRowSelectors.join(',')).forEach(row => {
             const name = row.querySelector('.product-name, td a')?.innerText;
             const qtyInput = row.querySelector('.qty');
             const quantity = qtyInput ? parseInt(qtyInput.value) : 1;

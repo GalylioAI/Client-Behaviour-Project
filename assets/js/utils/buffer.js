@@ -56,6 +56,7 @@ const BehaviourTrackerBuffer = {
 
     /**
      * Add event to buffer
+     * Automatically injects visitor_id into every event
      * @param {object} eventData 
      */
     add: function (eventData) {
@@ -63,6 +64,11 @@ const BehaviourTrackerBuffer = {
             // Drop oldest event if buffer full (prevent memory leak)
             this.buffer.shift();
             if (this.debug) BehaviourTrackerLogger.warn('Buffer full, dropping oldest event');
+        }
+
+        // Auto-inject visitor_id if not already present
+        if (!eventData.visitor_id && typeof BehaviourTrackerSession !== 'undefined' && BehaviourTrackerSession.visitorId) {
+            eventData.visitor_id = BehaviourTrackerSession.visitorId;
         }
 
         this.buffer.push(eventData);

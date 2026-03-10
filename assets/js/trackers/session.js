@@ -4,15 +4,37 @@
  */
 const BehaviourTrackerSession = {
     sessionId: null,
+    visitorId: null,
 
     init: function () {
+        this.visitorId = this.getOrCreateVisitorId();
         this.sessionId = this.getOrCreateSessionId();
         this.trackSessionStart();
+        this.checkVisitorIdentification();
 
         // Session End is tricky in JS. We can try to hook into visibility change or unload, 
         // but it's not guaranteed. True "session end" usually calculated on backend via timeout.
         // We will send a beacon on unload if possible.
         window.addEventListener('beforeunload', this.handleUnload.bind(this));
+    },
+
+    /**
+     * Get or create persistent Visitor ID (survives browser restarts)
+     * This is the key identifier for non-logged-in users across sessions
+     */
+    getOrCreateVisitorId: function () {
+        let vid = this.getCookie('bt_visitor_id');
+        if (!vid) {
+            vid = this.generateUUID();
+            // 2-year cookie — persists across sessions and browser restarts
+            this.setCookie('bt_visitor_id', vid, 60 * 24 * 365 * 2);
+            this.isNewVisitor = true;
+        } else {
+            // Refresh cookie expiration on every visit
+            this.setCookie('bt_visitor_id', vid, 60 * 24 * 365 * 2);
+            this.isNewVisitor = false;
+        }
+        return vid;
     },
 
     /**
@@ -30,6 +52,38 @@ const BehaviourTrackerSession = {
             this.isNewSession = false;
         }
         return sid;
+    },
+
+    /**
+     * Check if a logged-in user can be linked to this visitor_id
+     * Fires 'visitor_identified' event to merge guest history with account
+     */
+    checkVisitorIdentification: function () {
+        var customerId = (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest';
+        if (customerId === 'guest' || customerId === 0 || customerId === '0') return;
+
+        // Check if we already identified this visitor<->customer link in this browser
+        var identifiedKey = 'bt_identified_' + customerId;
+        var alreadyIdentified = this.getCookie(identifiedKey);
+
+        if (!alreadyIdentified) {
+            // First time this customer is seen with this visitor_id — fire identification event
+            this.setCookie(identifiedKey, '1', 60 * 24 * 365 * 2); // Remember for 2 years
+
+            var data = {
+                event: 'visitor_identified',
+                event_type: 'USER ACCOUNT EVENTS',
+                timestamp: new Date().toISOString(),
+                session_id: this.sessionId,
+                visitor_id: this.visitorId,
+                customer_id: customerId,
+                customer_email: (typeof bt_customer_email !== 'undefined') ? bt_customer_email : null,
+                identification_method: 'login',
+                is_new_visitor: this.isNewVisitor,
+            };
+
+            this.sendData(data);
+        }
     },
 
     /**
@@ -88,7 +142,9 @@ const BehaviourTrackerSession = {
             event_type: 'USER SESSION & NAVIGATION EVENTS',
             timestamp: new Date().toISOString(),
             session_id: this.sessionId,
+            visitor_id: this.visitorId,
             customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
+            is_new_visitor: this.isNewVisitor,
             entry_page: window.location.pathname,
             referrer: document.referrer,
             device_type: this.getDeviceType(),
@@ -116,6 +172,7 @@ const BehaviourTrackerSession = {
             event_type: 'USER SESSION & NAVIGATION EVENTS',
             timestamp: new Date().toISOString(),
             session_id: this.sessionId,
+            visitor_id: this.visitorId,
             customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
         };
 

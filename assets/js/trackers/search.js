@@ -13,19 +13,44 @@ const BehaviourTrackerSearch = {
      * Track search submissions
      */
     trackSearchSubmissions: function () {
-        // WordPress search forms
-        document.querySelectorAll('form.search-form, form[role="search"], .searchform').forEach(form => {
-            form.addEventListener('submit', (e) => {
-                this.trackSearch(form);
+        const attachSubmitHandler = (selectors) => {
+            const selectorString = Array.isArray(selectors) ? selectors.join(',') : selectors;
+            document.querySelectorAll(selectorString).forEach(form => {
+                form.addEventListener('submit', (e) => {
+                    // Prevent duplicate submissions and infinite loops
+                    if (form.dataset.btTracking === 'true') return;
+                    
+                    e.preventDefault();
+                    form.dataset.btTracking = 'true';
+                    
+                    this.trackSearch(form);
+                    
+                    // Allow the buffer to queue the event before navigating away
+                    setTimeout(() => {
+                        form.submit();
+                    }, 300);
+                });
             });
-        });
+        };
 
-        // WooCommerce product search
-        document.querySelectorAll('form.woocommerce-product-search').forEach(form => {
-            form.addEventListener('submit', (e) => {
-                this.trackSearch(form);
-            });
-        });
+        // Build selector list (defaults + optional overrides from config)
+        const defaultSelectors = [
+            // WordPress search forms
+            'form.search-form',
+            'form[role="search"]',
+            '.searchform',
+            // WooCommerce product search
+            'form.woocommerce-product-search'
+        ];
+
+        const extraSelectors = (typeof bt_config !== 'undefined' &&
+            bt_config.BT_SELECTORS &&
+            Array.isArray(bt_config.BT_SELECTORS.search_forms))
+            ? bt_config.BT_SELECTORS.search_forms
+            : [];
+
+        const allSelectors = Array.from(new Set(defaultSelectors.concat(extraSelectors)));
+        attachSubmitHandler(allSelectors);
     },
 
     /**
@@ -65,7 +90,16 @@ const BehaviourTrackerSearch = {
             const target = e.target;
 
             // Check if it's a filter checkbox or select
-            if (target.closest('.woocommerce-widget-layered-nav, .widget_layered_nav')) {
+            const defaultSelectors = ['.woocommerce-widget-layered-nav', '.widget_layered_nav'];
+            const extraSelectors = (typeof bt_config !== 'undefined' &&
+                bt_config.BT_SELECTORS &&
+                Array.isArray(bt_config.BT_SELECTORS.filter_containers))
+                ? bt_config.BT_SELECTORS.filter_containers
+                : [];
+            const allSelectors = Array.from(new Set(defaultSelectors.concat(extraSelectors)));
+            const selectorString = allSelectors.join(',');
+
+            if (target.closest(selectorString)) {
                 this.trackFilterApplied(target);
             }
         });
@@ -103,7 +137,19 @@ const BehaviourTrackerSearch = {
         document.body.addEventListener('change', (e) => {
             const target = e.target;
 
-            if (target.classList.contains('orderby') || target.name === 'orderby') {
+            const defaultSelectors = ['orderby'];
+            const extraSelectors = (typeof bt_config !== 'undefined' &&
+                bt_config.BT_SELECTORS &&
+                Array.isArray(bt_config.BT_SELECTORS.sort_selects))
+                ? bt_config.BT_SELECTORS.sort_selects
+                : [];
+
+            // If configured with full selectors, check those as well; otherwise fall back to class/name
+            const fullSelectorMatch = extraSelectors.length
+                ? target.matches(extraSelectors.join(','))
+                : false;
+
+            if (fullSelectorMatch || target.classList.contains('orderby') || target.name === 'orderby') {
                 this.trackSortChanged(target);
             }
         });

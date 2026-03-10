@@ -14,7 +14,19 @@ const BehaviourTrackerMarketing = {
      */
     trackNewsletterSignups: function () {
         // Common newsletter form selectors
-        document.querySelectorAll('form.newsletter, form[class*="newsletter"], form.mc4wp-form').forEach(form => {
+        const defaultSelectors = [
+            'form.newsletter',
+            'form[class*="newsletter"]',
+            'form.mc4wp-form'
+        ];
+        const extraSelectors = (typeof bt_config !== 'undefined' &&
+            bt_config.BT_SELECTORS &&
+            Array.isArray(bt_config.BT_SELECTORS.newsletter_forms))
+            ? bt_config.BT_SELECTORS.newsletter_forms
+            : [];
+        const allSelectors = Array.from(new Set(defaultSelectors.concat(extraSelectors)));
+
+        document.querySelectorAll(allSelectors.join(',')).forEach(form => {
             form.addEventListener('submit', (e) => {
                 this.trackNewsletter(form);
             });
@@ -58,7 +70,20 @@ const BehaviourTrackerMarketing = {
     trackBannerClicks: function () {
         // Track clicks on promotional banners
         document.body.addEventListener('click', (e) => {
-            const banner = e.target.closest('[class*="banner"], [class*="promo"], .promotion');
+            const defaultSelectors = [
+                '[class*="banner"]',
+                '[class*="promo"]',
+                '.promotion'
+            ];
+            const extraSelectors = (typeof bt_config !== 'undefined' &&
+                bt_config.BT_SELECTORS &&
+                Array.isArray(bt_config.BT_SELECTORS.banner_elements))
+                ? bt_config.BT_SELECTORS.banner_elements
+                : [];
+            const allSelectors = Array.from(new Set(defaultSelectors.concat(extraSelectors)));
+            const selectorString = allSelectors.join(',');
+
+            const banner = e.target.closest(selectorString);
             if (banner) {
                 this.trackBanner(banner, e.target);
             }
@@ -96,7 +121,19 @@ const BehaviourTrackerMarketing = {
     trackSocialShares: function () {
         // Track clicks on social share buttons
         document.body.addEventListener('click', (e) => {
-            const shareBtn = e.target.closest('[class*="share"], [class*="social-"]');
+            const defaultSelectors = [
+                '[class*="share"]',
+                '[class*="social-"]'
+            ];
+            const extraSelectors = (typeof bt_config !== 'undefined' &&
+                bt_config.BT_SELECTORS &&
+                Array.isArray(bt_config.BT_SELECTORS.social_share_buttons))
+                ? bt_config.BT_SELECTORS.social_share_buttons
+                : [];
+            const allSelectors = Array.from(new Set(defaultSelectors.concat(extraSelectors)));
+            const selectorString = allSelectors.join(',');
+
+            const shareBtn = e.target.closest(selectorString);
             if (shareBtn && (shareBtn.href || shareBtn.dataset.network)) {
                 this.trackSocialShare(shareBtn);
             }

@@ -12,28 +12,60 @@ const BehaviourTrackerAccount = {
      */
     trackAccountInteractions: function () {
         // Login form submission
-        document.querySelectorAll('form.login, form.woocommerce-form-login').forEach(form => {
+        const loginDefaults = ['form.login', 'form.woocommerce-form-login'];
+        const loginExtra = (typeof bt_config !== 'undefined' &&
+            bt_config.BT_SELECTORS &&
+            Array.isArray(bt_config.BT_SELECTORS.login_forms))
+            ? bt_config.BT_SELECTORS.login_forms
+            : [];
+        const loginSelectors = Array.from(new Set(loginDefaults.concat(loginExtra)));
+
+        document.querySelectorAll(loginSelectors.join(',')).forEach(form => {
             form.addEventListener('submit', (e) => {
                 this.trackLogin(form);
             });
         });
 
         // Registration form submission
-        document.querySelectorAll('form.register, form.woocommerce-form-register').forEach(form => {
+        const registerDefaults = ['form.register', 'form.woocommerce-form-register'];
+        const registerExtra = (typeof bt_config !== 'undefined' &&
+            bt_config.BT_SELECTORS &&
+            Array.isArray(bt_config.BT_SELECTORS.register_forms))
+            ? bt_config.BT_SELECTORS.register_forms
+            : [];
+        const registerSelectors = Array.from(new Set(registerDefaults.concat(registerExtra)));
+
+        document.querySelectorAll(registerSelectors.join(',')).forEach(form => {
             form.addEventListener('submit', (e) => {
                 this.trackRegistration(form);
             });
         });
 
         // Profile update
-        document.querySelectorAll('form.edit-account, form.woocommerce-EditAccountForm').forEach(form => {
+        const editDefaults = ['form.edit-account', 'form.woocommerce-EditAccountForm'];
+        const editExtra = (typeof bt_config !== 'undefined' &&
+            bt_config.BT_SELECTORS &&
+            Array.isArray(bt_config.BT_SELECTORS.edit_account_forms))
+            ? bt_config.BT_SELECTORS.edit_account_forms
+            : [];
+        const editSelectors = Array.from(new Set(editDefaults.concat(editExtra)));
+
+        document.querySelectorAll(editSelectors.join(',')).forEach(form => {
             form.addEventListener('submit', (e) => {
                 this.trackProfileUpdate();
             });
         });
 
         // Password reset
-        document.querySelectorAll('form.lost_reset_password, form.woocommerce-ResetPassword').forEach(form => {
+        const resetDefaults = ['form.lost_reset_password', 'form.woocommerce-ResetPassword'];
+        const resetExtra = (typeof bt_config !== 'undefined' &&
+            bt_config.BT_SELECTORS &&
+            Array.isArray(bt_config.BT_SELECTORS.reset_password_forms))
+            ? bt_config.BT_SELECTORS.reset_password_forms
+            : [];
+        const resetSelectors = Array.from(new Set(resetDefaults.concat(resetExtra)));
+
+        document.querySelectorAll(resetSelectors.join(',')).forEach(form => {
             form.addEventListener('submit', (e) => {
                 this.trackPasswordReset();
             });

@@ -19,7 +19,14 @@ const BehaviourTrackerProduct = {
         if (typeof bt_config !== 'undefined' && bt_config.BT_EVENT_PRODUCT_VIEW == '0') return;
 
         // Detect if we are on a product page (WooCommerce)
-        const productContainer = document.querySelector('.product, .single-product');
+        const defaultSelectors = ['.product', '.single-product'];
+        const extraSelectors = (typeof bt_config !== 'undefined' &&
+            bt_config.BT_SELECTORS &&
+            Array.isArray(bt_config.BT_SELECTORS.product_page_containers))
+            ? bt_config.BT_SELECTORS.product_page_containers
+            : [];
+        const allSelectors = Array.from(new Set(defaultSelectors.concat(extraSelectors)));
+        const productContainer = document.querySelector(allSelectors.join(','));
         if (!productContainer || !document.body.classList.contains('single-product')) return;
 
         // Extract product data from WooCommerce
@@ -55,7 +62,14 @@ const BehaviourTrackerProduct = {
         if (typeof bt_config !== 'undefined' && bt_config.BT_EVENT_PRODUCT_IMPRESSION == '0') return;
 
         // WooCommerce product list selector
-        const products = document.querySelectorAll('.products .product, ul.products li.product');
+        const defaultSelectors = ['.products .product', 'ul.products li.product'];
+        const extraSelectors = (typeof bt_config !== 'undefined' &&
+            bt_config.BT_SELECTORS &&
+            Array.isArray(bt_config.BT_SELECTORS.product_list_items))
+            ? bt_config.BT_SELECTORS.product_list_items
+            : [];
+        const allSelectors = Array.from(new Set(defaultSelectors.concat(extraSelectors)));
+        const products = document.querySelectorAll(allSelectors.join(','));
         if (products.length === 0) return;
 
         const productList = [];

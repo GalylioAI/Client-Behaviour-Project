@@ -35,14 +35,36 @@ const BehaviourTrackerCheckout = {
      */
     trackCheckoutInteractions: function () {
         // Shipping method selection
-        jQuery(document.body).on('change', 'input[name^="shipping_method"]', (e) => {
-            this.trackShippingMethod(e.currentTarget);
-        });
+        (function () {
+            const defaultSelectors = ['input[name^="shipping_method"]'];
+            const extraSelectors = (typeof bt_config !== 'undefined' &&
+                bt_config.BT_SELECTORS &&
+                Array.isArray(bt_config.BT_SELECTORS.shipping_method_inputs))
+                ? bt_config.BT_SELECTORS.shipping_method_inputs
+                : [];
+            const allSelectors = Array.from(new Set(defaultSelectors.concat(extraSelectors)));
+            const selectorString = allSelectors.join(',');
+
+            jQuery(document.body).on('change', selectorString, (e) => {
+                this.trackShippingMethod(e.currentTarget);
+            });
+        }).call(this);
 
         // Payment method selection
-        jQuery(document.body).on('change', 'input[name="payment_method"]', (e) => {
-            this.trackPaymentMethod(e.currentTarget);
-        });
+        (function () {
+            const defaultSelectors = ['input[name="payment_method"]'];
+            const extraSelectors = (typeof bt_config !== 'undefined' &&
+                bt_config.BT_SELECTORS &&
+                Array.isArray(bt_config.BT_SELECTORS.payment_method_inputs))
+                ? bt_config.BT_SELECTORS.payment_method_inputs
+                : [];
+            const allSelectors = Array.from(new Set(defaultSelectors.concat(extraSelectors)));
+            const selectorString = allSelectors.join(',');
+
+            jQuery(document.body).on('change', selectorString, (e) => {
+                this.trackPaymentMethod(e.currentTarget);
+            });
+        }).call(this);
     },
 
     /**

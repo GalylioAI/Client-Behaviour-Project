@@ -389,6 +389,7 @@ class BehaviourTrackerWordPress
 
         // Build config array
         $config = array(
+            // Section 1: Session & Navigation
             'BT_SEC_SESSION_NAV' => get_option('bt_sec_session_nav', '1'),
             'BT_EVENT_PAGE_VIEW' => get_option('bt_event_page_view', '1'),
             'BT_EL_PV_URL' => get_option('bt_el_pv_url', '1'),
@@ -400,8 +401,52 @@ class BehaviourTrackerWordPress
             'BT_EVENT_SCROLL_DEPTH' => get_option('bt_event_scroll_depth', '1'),
             'BT_EVENT_CLICK' => get_option('bt_event_click', '1'),
             'BT_DEBUG_MODE' => get_option('bt_debug_mode', '0'),
+
+            // Section 2: Product Discovery
+            'BT_EVENT_PRODUCT_VIEW' => get_option('bt_event_product_view', '1'),
+            'BT_EVENT_PRODUCT_IMPRESSION' => get_option('bt_event_product_impression', '1'),
+            'BT_EVENT_PRODUCT_QUICK_VIEW' => get_option('bt_event_product_quick_view', '1'),
+
+            // Section 3: Shopping Cart
+            'BT_EVENT_CART_UPDATE' => get_option('bt_event_cart_update', '1'),
+            'BT_EVENT_CART_VIEW' => get_option('bt_event_cart_view', '1'),
+            'BT_EVENT_CART_QUANTITY_CHANGE' => get_option('bt_event_cart_quantity_change', '1'),
+            'BT_EVENT_COUPON_APPLY' => get_option('bt_event_coupon_apply', '1'),
+
+            // Section 4: Checkout & Purchase
+            'BT_EVENT_CHECKOUT_START' => get_option('bt_event_checkout_start', '1'),
+            'BT_EVENT_CHECKOUT_STEP' => get_option('bt_event_checkout_step', '1'),
+            'BT_EVENT_SHIPPING_METHOD' => get_option('bt_event_shipping_method', '1'),
+            'BT_EVENT_PAYMENT_METHOD' => get_option('bt_event_payment_method', '1'),
+            'BT_EVENT_PURCHASE_COMPLETED' => get_option('bt_event_purchase_completed', '1'),
+            'BT_EVENT_PAYMENT_FAILED' => get_option('bt_event_payment_failed', '1'),
+
+            // Section 5: User Account
+            'BT_EVENT_REGISTRATION' => get_option('bt_event_registration', '1'),
+            'BT_EVENT_LOGIN' => get_option('bt_event_login', '1'),
+            'BT_EVENT_LOGOUT' => get_option('bt_event_logout', '1'),
+            'BT_EVENT_PASSWORD_RESET' => get_option('bt_event_password_reset', '1'),
+            'BT_EVENT_PROFILE_UPDATE' => get_option('bt_event_profile_update', '1'),
+            'BT_EVENT_WISHLIST' => get_option('bt_event_wishlist', '1'),
+            'BT_EVENT_ADDRESS_BOOK' => get_option('bt_event_address_book', '1'),
+
+            // Section 6: Search & Filters
+            'BT_EVENT_SEARCH_QUERY' => get_option('bt_event_search_query', '1'),
+            'BT_EVENT_SEARCH_AUTOCOMPLETE' => get_option('bt_event_search_autocomplete', '1'),
+            'BT_EVENT_FILTER_APPLIED' => get_option('bt_event_filter_applied', '1'),
+            'BT_EVENT_SORT_CHANGED' => get_option('bt_event_sort_changed', '1'),
+            'BT_EVENT_ZERO_RESULTS' => get_option('bt_event_zero_results', '1'),
+
+            // Section 7: Marketing & Promotions
+            'BT_EVENT_NEWSLETTER_SIGNUP' => get_option('bt_event_newsletter_signup', '1'),
+            'BT_EVENT_POPUP_INTERACTION' => get_option('bt_event_popup_interaction', '1'),
+            'BT_EVENT_BANNER_CLICK' => get_option('bt_event_banner_click', '1'),
+            'BT_EVENT_SOCIAL_SHARE' => get_option('bt_event_social_share', '1'),
+
+            // General config
             'BT_BUFFER_INTERVAL' => isset($this->config['buffer_interval']) ? $this->config['buffer_interval'] : 10,
             'BT_ENABLED_SECTIONS' => isset($this->config['enabled_sections']) ? $this->config['enabled_sections'] : array(),
+            'BT_SELECTORS' => isset($this->config['selectors']) ? $this->config['selectors'] : array(),
         );
 
         wp_localize_script('bt-buffer', 'behaviourTrackerWebhookUrl', isset($this->config['webhook_url']) ? $this->config['webhook_url'] : '');
