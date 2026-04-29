@@ -71,6 +71,11 @@ const BehaviourTrackerBuffer = {
             eventData.visitor_id = BehaviourTrackerSession.visitorId;
         }
 
+        // Auto-inject website_id if configured
+        if (!eventData.website_id && typeof bt_config !== 'undefined' && bt_config.BT_WEBSITE_ID) {
+            eventData.website_id = bt_config.BT_WEBSITE_ID;
+        }
+
         this.buffer.push(eventData);
         if (this.debug) BehaviourTrackerLogger.log('Event added. Buffer size: ' + this.buffer.length);
 

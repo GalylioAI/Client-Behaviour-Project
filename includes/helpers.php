@@ -99,6 +99,16 @@ function bt_send_event($event_data)
         return false;
     }
 
+    // Add website ID if available (admin setting takes precedence over config.php)
+    if (!isset($event_data['website_id'])) {
+        $website_id_override = get_option('bt_website_id', '');
+        if (!empty($website_id_override)) {
+            $event_data['website_id'] = $website_id_override;
+        } elseif (isset($config['website_id']) && !empty($config['website_id'])) {
+            $event_data['website_id'] = $config['website_id'];
+        }
+    }
+
     // Add session ID if available
     if (!isset($event_data['session_id'])) {
         $event_data['session_id'] = isset($_COOKIE['bt_session_id']) ? $_COOKIE['bt_session_id'] : null;

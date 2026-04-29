@@ -192,6 +192,9 @@ class BehaviourTrackerWordPress
         add_option('bt_event_popup_interaction', '1');
         add_option('bt_event_banner_click', '1');
         add_option('bt_event_social_share', '1');
+
+        // General
+        add_option('bt_website_id', '');
     }
 
     /**
@@ -235,6 +238,7 @@ class BehaviourTrackerWordPress
     public function get_all_setting_keys()
     {
         return array(
+            'bt_website_id',
             'bt_sec_session_nav',
             'bt_event_page_view',
             'bt_el_pv_url',
@@ -388,6 +392,7 @@ class BehaviourTrackerWordPress
         $page_type = $this->get_page_type();
 
         // Build config array
+        $website_id_override = get_option('bt_website_id', '');
         $config = array(
             // Section 1: Session & Navigation
             'BT_SEC_SESSION_NAV' => get_option('bt_sec_session_nav', '1'),
@@ -447,6 +452,9 @@ class BehaviourTrackerWordPress
             'BT_BUFFER_INTERVAL' => isset($this->config['buffer_interval']) ? $this->config['buffer_interval'] : 10,
             'BT_ENABLED_SECTIONS' => isset($this->config['enabled_sections']) ? $this->config['enabled_sections'] : array(),
             'BT_SELECTORS' => isset($this->config['selectors']) ? $this->config['selectors'] : array(),
+            'BT_WEBSITE_ID' => !empty($website_id_override)
+                ? $website_id_override
+                : (isset($this->config['website_id']) ? $this->config['website_id'] : ''),
         );
 
         wp_localize_script('bt-buffer', 'behaviourTrackerWebhookUrl', isset($this->config['webhook_url']) ? $this->config['webhook_url'] : '');
