@@ -114,6 +114,7 @@ class BehaviourTracker extends Module
         Configuration::updateValue('BT_EVENT_POPUP_INTERACTION', true);
         Configuration::updateValue('BT_EVENT_BANNER_CLICK', true);
         Configuration::updateValue('BT_EVENT_SOCIAL_SHARE', true);
+        Configuration::updateValue('BT_WEBSITE_ID', '');
 
         return true;
     }
@@ -161,6 +162,7 @@ class BehaviourTracker extends Module
         Configuration::deleteByName('BT_EVENT_POPUP_INTERACTION');
         Configuration::deleteByName('BT_EVENT_BANNER_CLICK');
         Configuration::deleteByName('BT_EVENT_SOCIAL_SHARE');
+        Configuration::deleteByName('BT_WEBSITE_ID');
 
         return parent::uninstall();
     }
@@ -240,6 +242,12 @@ class BehaviourTracker extends Module
                                 array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
                                 array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
                             ),
+                        ),
+                        array(
+                            'type' => 'text',
+                            'label' => $this->l('Website Identifier'),
+                            'name' => 'BT_WEBSITE_ID',
+                            'desc' => $this->l('This ID is sent with every event as website_id so you can distinguish data sources. If empty, config.php website_id is used.'),
                         ),
 
                         // Header: PAGE_VIEW
@@ -714,6 +722,7 @@ class BehaviourTracker extends Module
     protected function getConfigFormValues()
     {
         return array(
+            'BT_WEBSITE_ID' => Configuration::get('BT_WEBSITE_ID', ''),
             'BT_SEC_SESSION_NAV' => Configuration::get('BT_SEC_SESSION_NAV', true),
             'BT_EVENT_PAGE_VIEW' => Configuration::get('BT_EVENT_PAGE_VIEW', true),
             'BT_EL_PV_URL' => Configuration::get('BT_EL_PV_URL', true),
@@ -783,6 +792,7 @@ class BehaviourTracker extends Module
         // Load external config for webhook URL
         $externalConfigPath = dirname(__FILE__) . '/config.php';
         $webhookUrl = ''; // No default fallback
+        $websiteId = Configuration::get('BT_WEBSITE_ID');
 
         if (file_exists($externalConfigPath)) {
             $externalConfig = include($externalConfigPath);
@@ -811,6 +821,10 @@ class BehaviourTracker extends Module
                     'marketing' => true,
                 ];
             }
+
+            if (empty($websiteId) && is_array($externalConfig) && isset($externalConfig['website_id'])) {
+                $websiteId = (string) $externalConfig['website_id'];
+            }
         } else {
             $config['BT_BUFFER_INTERVAL'] = 10; // default if config.php doesn't exist
             // Default: all sections enabled
@@ -824,6 +838,8 @@ class BehaviourTracker extends Module
                 'marketing' => true,
             ];
         }
+
+        $config['BT_WEBSITE_ID'] = (string) $websiteId;
 
         // Define variables in JS
         Media::addJsDef([

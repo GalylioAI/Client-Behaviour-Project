@@ -122,6 +122,11 @@ const BehaviourTrackerSession = {
             customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
         };
 
+        // Buffer auto-injects website_id, but unload beacon bypasses the buffer
+        if (typeof bt_config !== 'undefined' && bt_config.BT_WEBSITE_ID) {
+            data.website_id = bt_config.BT_WEBSITE_ID;
+        }
+
         // Use sendBeacon for unload if available
         if (navigator.sendBeacon && typeof behaviourTrackerWebhookUrl !== 'undefined') {
             const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
