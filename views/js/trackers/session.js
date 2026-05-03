@@ -122,9 +122,17 @@ const BehaviourTrackerSession = {
             customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
         };
 
-        // Use sendBeacon for unload if available
+        // Buffer auto-injects site_id, but this direct unload beacon bypasses the buffer.
+        if (typeof bt_config !== 'undefined' && (bt_config.BT_SITE_ID || bt_config.BT_WEBSITE_ID)) {
+            data.site_id = bt_config.BT_SITE_ID || bt_config.BT_WEBSITE_ID;
+        }
+
+        // Use the shared standard envelope even for direct unload events.
         if (navigator.sendBeacon && typeof behaviourTrackerWebhookUrl !== 'undefined') {
-            const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+            const payload = (typeof BehaviourTrackerBuffer !== 'undefined' && typeof BehaviourTrackerBuffer.buildEnvelope === 'function')
+                ? JSON.stringify(BehaviourTrackerBuffer.buildEnvelope([data], true))
+                : JSON.stringify(data);
+            const blob = new Blob([payload], { type: 'application/json' });
             navigator.sendBeacon(behaviourTrackerWebhookUrl, blob);
         }
     },
