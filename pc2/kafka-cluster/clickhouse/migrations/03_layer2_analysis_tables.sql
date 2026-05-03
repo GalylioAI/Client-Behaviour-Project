@@ -18,9 +18,9 @@ CREATE TABLE IF NOT EXISTS analysis_runs
     finished_at  Nullable(DateTime64(3, 'UTC')),
     updated_at   DateTime64(3, 'UTC') DEFAULT now64(3)
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree(updated_at)
 PARTITION BY toYYYYMM(started_at)
-ORDER BY (pipeline, site_id, started_at, run_id);
+ORDER BY (pipeline, site_id, run_id);
 
 CREATE TABLE IF NOT EXISTS session_features
 (
