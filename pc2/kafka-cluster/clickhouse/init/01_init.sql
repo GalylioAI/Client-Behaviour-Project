@@ -68,8 +68,8 @@ SETTINGS index_granularity = 8192;
 -- 3. Materialized view (pipes Kafka -> ecommerce_events)
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_ecommerce_events TO ecommerce_events AS
 SELECT
-    parseDateTimeBestEffortOrNow64(received_at)                      AS received_at,
-    parseDateTimeBestEffortOrNow64(coalesce(timestamp, received_at)) AS event_timestamp,
+    coalesce(parseDateTime64BestEffortOrNull(received_at, 3, 'UTC'), now64(3))                      AS received_at,
+    coalesce(parseDateTime64BestEffortOrNull(coalesce(timestamp, received_at), 3, 'UTC'), now64(3)) AS event_timestamp,
     coalesce(schema_version, '1.0')                                  AS schema_version,
     coalesce(event_name, event_type, 'unknown')                      AS event_name,
     coalesce(event_type, 'custom')                                   AS event_type,
