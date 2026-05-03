@@ -53,6 +53,7 @@ services:
       KAFKA_BROKERS: "192.168.1.105:9092,192.168.1.106:9092,192.168.1.109:9092"
       KAFKA_TOPIC: "ecommerce.events"
       DEAD_LETTER_TOPIC: "ecommerce.dead-letter"
+      CORS_ALLOW_ORIGINS: "https://tdiscount.tn,https://www.tdiscount.tn"
     depends_on:
       - kafka
     networks:

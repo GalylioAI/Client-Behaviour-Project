@@ -26,13 +26,27 @@ KAFKA_TOPIC       = os.getenv("KAFKA_TOPIC", "ecommerce.events")
 DEAD_LETTER_TOPIC = os.getenv("DEAD_LETTER_TOPIC", "ecommerce.dead-letter")
 GEO_API_URL       = "http://ip-api.com/json/{ip}?fields=status,country,countryCode,regionName,city,zip,lat,lon,timezone,isp,org,query"
 PRIVATE_PREFIXES  = ("127.", "10.", "192.168.", "172.16.", "::1", "localhost")
+CORS_ALLOW_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ALLOW_ORIGINS",
+        "https://tdiscount.tn,https://www.tdiscount.tn,http://localhost,http://localhost:3000,http://localhost:8080",
+    ).split(",")
+    if origin.strip()
+]
 
 # Worker identity — each uvicorn worker process gets a unique ID based on PID
 WORKER_ID = f"worker_{os.getpid()}"
 
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(title="Kafka Bridge", version="2.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ALLOW_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+)
 
 # ── Prometheus metrics ────────────────────────────────────────────────────────
 # Each worker tracks its own counters independently.
@@ -318,6 +332,7 @@ async def health():
         "worker": WORKER_ID,
         "kafka_brokers": KAFKA_BROKERS,
         "topic": KAFKA_TOPIC,
+        "cors_allow_origins": CORS_ALLOW_ORIGINS,
     }
 
 @app.get("/metrics", response_class=PlainTextResponse)
