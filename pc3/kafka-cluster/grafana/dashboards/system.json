@@ -1,0 +1,237 @@
+{
+  "title": "System Metrics — All PCs",
+  "uid": "system-metrics",
+  "tags": ["system"],
+  "timezone": "browser",
+  "refresh": "15s",
+  "templating": {
+    "list": [
+      {
+        "name": "pc",
+        "type": "custom",
+        "label": "PC",
+        "query": "pc1,pc2,pc3",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": [
+          { "text": "All", "value": "$__all", "selected": true },
+          { "text": "pc1", "value": "pc1", "selected": false },
+          { "text": "pc2", "value": "pc2", "selected": false },
+          { "text": "pc3", "value": "pc3", "selected": false }
+        ],
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true
+      },
+      {
+        "name": "device",
+        "type": "query",
+        "label": "Network Device",
+        "datasource": "Prometheus",
+        "query": "label_values(node_network_receive_bytes_total{pc=~\"$pc\", device!=\"lo\"}, device)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "CPU Usage % — $pc",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "100 - (avg by (pc) (rate(node_cpu_seconds_total{mode='idle', pc=~'$pc'}[1m])) * 100)",
+          "legendFormat": "{{pc}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "RAM Usage % — $pc",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 75 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "100 * (1 - node_memory_MemAvailable_bytes{pc=~'$pc'} / node_memory_MemTotal_bytes{pc=~'$pc'})",
+          "legendFormat": "{{pc}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Disk Usage % — $pc",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 75 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "100 - (node_filesystem_avail_bytes{pc=~'$pc', mountpoint='/'} / node_filesystem_size_bytes{pc=~'$pc', mountpoint='/'} * 100)",
+          "legendFormat": "{{pc}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Network Traffic — $pc ($device)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 10
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": ".* TX$" },
+            "properties": [
+              { "id": "custom.negativeY", "value": true }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "rate(node_network_receive_bytes_total{pc=~'$pc', device=~'$device'}[1m])",
+          "legendFormat": "{{pc}} / {{device}} RX"
+        },
+        {
+          "expr": "rate(node_network_transmit_bytes_total{pc=~'$pc', device=~'$device'}[1m])",
+          "legendFormat": "{{pc}} / {{device}} TX"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "CPU Usage — All PCs",
+      "type": "bargauge",
+      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 6 },
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "targets": [
+        {
+          "expr": "100 - (avg by (pc) (rate(node_cpu_seconds_total{mode='idle'}[1m])) * 100)",
+          "legendFormat": "{{pc}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "RAM Available — All PCs",
+      "type": "bargauge",
+      "gridPos": { "x": 0, "y": 22, "w": 24, "h": 6 },
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 2147483648 },
+              { "color": "green", "value": 4294967296 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "targets": [
+        {
+          "expr": "node_memory_MemAvailable_bytes{pc=~'.*'}",
+          "legendFormat": "{{pc}} free"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 38,
+  "version": 4
+}

@@ -1,0 +1,40 @@
+USE tracer;
+
+ALTER TABLE kafka_ecommerce_events
+    ADD COLUMN IF NOT EXISTS schema_version Nullable(String),
+    ADD COLUMN IF NOT EXISTS platform Nullable(String),
+    ADD COLUMN IF NOT EXISTS context Nullable(String),
+    ADD COLUMN IF NOT EXISTS location Nullable(String);
+
+ALTER TABLE ecommerce_events
+    ADD COLUMN IF NOT EXISTS schema_version LowCardinality(String) DEFAULT '1.0' AFTER event_timestamp,
+    ADD COLUMN IF NOT EXISTS site_id LowCardinality(String) DEFAULT 'unknown' AFTER event_type,
+    ADD COLUMN IF NOT EXISTS platform LowCardinality(String) DEFAULT 'unknown' AFTER site_id,
+    ADD COLUMN IF NOT EXISTS properties String DEFAULT '{}' AFTER is_unload,
+    ADD COLUMN IF NOT EXISTS context String DEFAULT '{}' AFTER properties,
+    ADD COLUMN IF NOT EXISTS location String DEFAULT '{}' AFTER context;
+
+DROP VIEW IF EXISTS mv_ecommerce_events;
+
+CREATE MATERIALIZED VIEW mv_ecommerce_events TO ecommerce_events AS
+SELECT
+    parseDateTimeBestEffortOrNow64(received_at)                      AS received_at,
+    parseDateTimeBestEffortOrNow64(coalesce(timestamp, received_at)) AS event_timestamp,
+    coalesce(schema_version, '1.0')                                  AS schema_version,
+    coalesce(event_name, event_type, 'unknown')                      AS event_name,
+    coalesce(event_type, 'custom')                                   AS event_type,
+    coalesce(site_id, 'unknown')                                     AS site_id,
+    coalesce(platform, 'unknown')                                    AS platform,
+    coalesce(session_id, '')                                         AS session_id,
+    user_id                                                          AS visitor_id,
+    coalesce(customer_id, '')                                        AS customer_id,
+    customer_email,
+    page_type,
+    page_url,
+    coalesce(source, 'client_js')                                    AS source,
+    coalesce(is_unload, 0)                                           AS is_unload,
+    coalesce(properties, '{}')                                       AS properties,
+    coalesce(context, '{}')                                          AS context,
+    coalesce(location, '{}')                                         AS location,
+    coalesce(raw_event, '{}')                                        AS raw_event
+FROM kafka_ecommerce_events;

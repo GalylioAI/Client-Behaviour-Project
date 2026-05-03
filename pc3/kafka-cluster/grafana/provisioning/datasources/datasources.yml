@@ -1,0 +1,24 @@
+apiVersion: 1
+
+datasources:
+  # Prometheus — for Kafka, system, and bridge metrics
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+
+  # ClickHouse — for tracer event data (page views, clicks, scroll)
+  - name: ClickHouse
+    type: grafana-clickhouse-datasource
+    access: proxy
+    editable: true
+    jsonData:
+      host: 192.168.1.106
+      port: 9000
+      username: admin
+      defaultDatabase: tracer
+      protocol: native
+    secureJsonData:
+      password: changeme

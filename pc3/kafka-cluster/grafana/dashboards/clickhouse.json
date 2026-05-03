@@ -1,0 +1,80 @@
+{
+  "title": "ClickHouse Metrics",
+  "uid": "clickhouse-metrics",
+  "tags": ["clickhouse"],
+  "timezone": "browser",
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Queries Per Second",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(ClickHouseProfileEvents_Query[1m])",
+          "legendFormat": "Queries/s"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Inserts Per Second",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(ClickHouseProfileEvents_InsertedRows[1m])",
+          "legendFormat": "Rows inserted/s"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Memory Usage",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "ClickHouseMetrics_MemoryTracking",
+          "legendFormat": "Memory used (bytes)"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Active Connections",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "ClickHouseMetrics_TCPConnection",
+          "legendFormat": "TCP connections"
+        },
+        {
+          "expr": "ClickHouseMetrics_HTTPConnection",
+          "legendFormat": "HTTP connections"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Kafka Consumer Lag (from ClickHouse side)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 8 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "ClickHouseProfileEvents_KafkaMessagesRead",
+          "legendFormat": "Messages read from Kafka"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 38,
+  "version": 1
+}

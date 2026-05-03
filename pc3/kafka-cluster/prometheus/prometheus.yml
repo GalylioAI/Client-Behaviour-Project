@@ -1,0 +1,67 @@
+global:
+  scrape_interval: 5s      # scrape every 15 seconds
+  evaluation_interval: 5s  # evaluate alerting rules every 15 seconds
+
+scrape_configs:
+
+  # ── System metrics (Node Exporter on all 3 PCs) ───────────────────────────
+  # Deploy node-exporter on PC1 and PC2 too (see instructions)
+  - job_name: "node-pc1"
+    static_configs:
+      - targets: ["192.168.1.105:9100"]
+        labels:
+          pc: "pc1"
+          ip: "192.168.1.105"
+
+  - job_name: "node-pc2"
+    static_configs:
+      - targets: ["192.168.1.106:9100"]
+        labels:
+          pc: "pc2"
+          ip: "192.168.1.106"
+
+  - job_name: "node-pc3"
+    static_configs:
+      - targets: ["192.168.1.109:9100"]
+        labels:
+          pc: "pc3"
+          ip: "192.168.1.109"
+
+  # ── Kafka broker metrics (Kafka Exporter on PC3) ──────────────────────────
+  - job_name: "kafka"
+    static_configs:
+      - targets: ["kafka-exporter:9308"]
+        labels:
+          cluster: "tracer-cluster"
+
+  # ── HTTP Bridge metrics (PC1) ─────────────────────────────────────────────
+  # The bridge exposes a /metrics endpoint for Prometheus
+  - job_name: "kafka-bridge"
+    static_configs:
+      - targets: ["192.168.1.105:8080"]
+        labels:
+          service: "http-bridge"
+          pc: "pc1"
+    metrics_path: "/metrics"
+
+  # ── ClickHouse metrics (PC2) ──────────────────────────────────────────────
+  # ClickHouse exposes Prometheus metrics natively on port 9363
+  - job_name: "clickhouse"
+    static_configs:
+      - targets: ["192.168.1.106:9363"]
+        labels:
+          service: "clickhouse"
+          pc: "pc2"
+
+  #---airflow------------------------------------------------------------------
+  - job_name: 'airflow'
+    static_configs:
+      - targets: ['192.168.1.109:8090']
+        labels:
+          service: "airflow"
+          pc: "pc3"
+    metrics_path: /metrics
+  # ── Prometheus itself ─────────────────────────────────────────────────────
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
