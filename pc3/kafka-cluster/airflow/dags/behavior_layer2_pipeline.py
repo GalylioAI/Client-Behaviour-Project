@@ -485,6 +485,14 @@ SEARCH_TERM = (
     f"lowerUTF8(trim(coalesce(nullIf({json_text('search_term')}, ''), "
     f"nullIf({json_text('search_query')}, ''), nullIf({json_text('query')}, ''), '')))"
 )
+REFERRER_URL = (
+    f"coalesce(nullIf({json_text('referrer_url')}, ''), "
+    f"nullIf({json_text('referrer')}, ''), "
+    "nullIf(JSONExtractString(JSONExtractRaw(raw_event, 'page'), 'referrer'), ''), "
+    "nullIf(JSONExtractString(JSONExtractRaw(raw_event, 'page'), 'referrer_url'), ''), "
+    "nullIf(JSONExtractString(raw_event, 'referrer_url'), ''), "
+    "nullIf(JSONExtractString(raw_event, 'referrer'), ''), '')"
+)
 DEVICE_TYPE = (
     f"lowerUTF8(coalesce(nullIf({json_text('device_type', 'context')}, ''), "
     f"nullIf({json_text('device')}, ''), 'unknown'))"
@@ -587,7 +595,7 @@ def refresh_session_features(client: ClickHouseHttpClient, site_id: str, start: 
             {DEVICE_TYPE} AS device_key,
             {IS_NEW_VISITOR} AS new_visitor_flag,
             {NEWSLETTER_OPT_IN} AS newsletter_flag,
-            coalesce(nullIf({json_text('referrer_url')}, ''), nullIf({json_text('referrer')}, ''), '') AS referrer_key
+            {REFERRER_URL} AS referrer_key
         SELECT
             site_id,
             coalesce(nullIf(anyLast(platform), ''), 'unknown') AS platform,
