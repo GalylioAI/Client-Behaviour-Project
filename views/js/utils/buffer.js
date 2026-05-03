@@ -103,7 +103,8 @@ const BehaviourTrackerBuffer = {
 
         fetch(this.config.webhookUrl, {
             method: 'POST',
-            mode: 'no-cors',
+            mode: 'cors',
+            credentials: 'omit',
             headers: {
                 'Content-Type': 'application/json',
             },
@@ -143,7 +144,8 @@ const BehaviourTrackerBuffer = {
     fallbackUnload: function (payload) {
         fetch(this.config.webhookUrl, {
             method: 'POST',
-            mode: 'no-cors',
+            mode: 'cors',
+            credentials: 'omit',
             headers: { 'Content-Type': 'application/json' },
             body: payload,
             keepalive: true
