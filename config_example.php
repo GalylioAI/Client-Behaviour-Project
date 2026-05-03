@@ -7,6 +7,9 @@ return [
     // The URL where the tracking data is sent
     'webhook_url' => 'https://server.yatootunisie.tn/webhook',
 
+    // Unique identifier for this website/store (sent as site_id)
+    'site_id' => 'your-store-id',
+
     // Buffer interval in seconds (how often to send batched events)
     // Minimum: 1 second, Recommended: 5-10 seconds
     'buffer_interval' => 3,

@@ -13,7 +13,11 @@ if (isset($_POST['bt_save_settings']) && check_admin_referer('bt_settings_save',
     $all_settings = $settings->get_all_setting_keys();
 
     foreach ($all_settings as $setting) {
-        $value = isset($_POST[$setting]) ? '1' : '0';
+        if ($setting === 'bt_website_id') {
+            $value = isset($_POST['bt_website_id']) ? sanitize_text_field(wp_unslash($_POST['bt_website_id'])) : '';
+        } else {
+            $value = isset($_POST[$setting]) ? '1' : '0';
+        }
         update_option($setting, $value);
     }
 
@@ -23,6 +27,11 @@ if (isset($_POST['bt_save_settings']) && check_admin_referer('bt_settings_save',
 // Get current values
 $get_option = function ($key) {
     return get_option($key, '1') === '1';
+};
+
+$get_text_option = function ($key, $default = '') {
+    $value = get_option($key, $default);
+    return is_string($value) ? $value : $default;
 };
 ?>
 
@@ -81,6 +90,26 @@ $get_option = function ($key) {
                 border-radius: 3px;
             }
         </style>
+
+        <div class="bt-section">
+            <h2><?php _e('General', 'behaviour-tracker'); ?></h2>
+            <p>
+                <label for="bt_website_id">
+                    <strong><?php _e('Website Identifier', 'behaviour-tracker'); ?></strong>
+                </label><br>
+                <input
+                    type="text"
+                    id="bt_website_id"
+                    name="bt_website_id"
+                    value="<?php echo esc_attr($get_text_option('bt_website_id', '')); ?>"
+                    class="regular-text"
+                    placeholder="e.g. wp_store_1"
+                >
+            </p>
+            <p class="description">
+                <?php _e('This ID is sent with every event as site_id so you can distinguish data sources.', 'behaviour-tracker'); ?>
+            </p>
+        </div>
 
         <!-- Section 1: Session & Navigation -->
         <div class="bt-section">
