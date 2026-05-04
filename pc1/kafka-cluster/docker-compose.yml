@@ -54,6 +54,12 @@ services:
       KAFKA_TOPIC: "ecommerce.events"
       DEAD_LETTER_TOPIC: "ecommerce.dead-letter"
       CORS_ALLOW_ORIGINS: "https://tdiscount.tn,https://www.tdiscount.tn"
+      CLICKHOUSE_HTTP_URL: "http://admin:changeme@192.168.1.106:8123/?database=tracer"
+      SITE_REGISTRY_ENABLED: "true"
+      # Temporary compatibility while old installed plugins are still missing write_key.
+      # Flip to "false" once customers update/reinstall their plugins.
+      SITE_REGISTRY_COMPAT_ALLOW_MISSING_KEY: "true"
+      SITE_REGISTRY_CACHE_TTL_SECONDS: "60"
     depends_on:
       - kafka
     networks:

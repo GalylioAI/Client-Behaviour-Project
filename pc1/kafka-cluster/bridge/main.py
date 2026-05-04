@@ -1,10 +1,13 @@
 import asyncio
+import hashlib
+import hmac
 import json
 import logging
 import os
 import time
 import uuid
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 import httpx
 from aiokafka import AIOKafkaProducer
@@ -34,6 +37,13 @@ CORS_ALLOW_ORIGINS = [
     ).split(",")
     if origin.strip()
 ]
+CLICKHOUSE_HTTP_URL = os.getenv(
+    "CLICKHOUSE_HTTP_URL",
+    "http://admin:changeme@192.168.1.106:8123/?database=tracer",
+)
+SITE_REGISTRY_ENABLED = os.getenv("SITE_REGISTRY_ENABLED", "false").lower() in ("1", "true", "yes", "on")
+SITE_REGISTRY_COMPAT_ALLOW_MISSING_KEY = os.getenv("SITE_REGISTRY_COMPAT_ALLOW_MISSING_KEY", "false").lower() in ("1", "true", "yes", "on")
+SITE_REGISTRY_CACHE_TTL_SECONDS = int(os.getenv("SITE_REGISTRY_CACHE_TTL_SECONDS", "60"))
 
 # Worker identity — each uvicorn worker process gets a unique ID based on PID
 WORKER_ID = f"worker_{os.getpid()}"
@@ -61,6 +71,7 @@ _metrics = {
     "geo_lookups_total":        0,
     "geo_cache_hits_total":     0,
     "kafka_errors_total":       0,
+    "events_auth_rejected_total": 0,
 }
 _start_time = time.time()
 
@@ -77,6 +88,7 @@ def prometheus_text() -> str:
         "geo_lookups_total":        ("counter", "Total IP geolocation lookups performed"),
         "geo_cache_hits_total":     ("counter", "Total IP geolocation cache hits"),
         "kafka_errors_total":       ("counter", "Total Kafka send errors"),
+        "events_auth_rejected_total": ("counter", "Total events rejected by tenant/site/key validation"),
     }
     lines = []
     for key, (mtype, help_text) in descriptions.items():
@@ -177,6 +189,7 @@ RESERVED_EVENT_KEYS = {
     "user_id", "customer_id", "customer_email", "page", "page_url", "url",
     "page_type", "page_title", "referrer_url", "referrer", "source", "platform",
     "site_id", "siteId", "website_id", "context", "properties", "data",
+    "write_key", "public_write_key", "server_secret_key", "api_key",
 }
 KNOWN_PLATFORMS = {"wordpress", "woocommerce", "prestashop", "shopify", "magento", "custom"}
 KNOWN_SOURCES = {"client_js", "server_php", "js", "php", "backend", "api"}
@@ -324,6 +337,198 @@ def validate_event(event: dict) -> str | None:
         return "missing required field: event_name or event_category"
     return None
 
+# ── Tenant/site registry validation ──────────────────────────────────────────
+_site_registry_cache: dict[str, tuple[float, dict | None]] = {}
+
+def sql_quote(value: str) -> str:
+    return "'" + str(value).replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+def hash_key(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+def clean_origin(value: str | None) -> str:
+    if not value:
+        return ""
+    parsed = urlparse(value)
+    if not parsed.scheme or not parsed.netloc:
+        return value.rstrip("/")
+    return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}".rstrip("/")
+
+def origin_host(value: str | None) -> str:
+    if not value:
+        return ""
+    parsed = urlparse(value)
+    return (parsed.hostname or "").lower()
+
+def extract_site_id(envelope: dict, events: list) -> str:
+    candidates = [
+        envelope.get("site_id"),
+        envelope.get("siteId"),
+        envelope.get("website_id"),
+    ]
+    if events and isinstance(events[0], dict):
+        candidates.extend([
+            events[0].get("site_id"),
+            events[0].get("siteId"),
+            events[0].get("website_id"),
+        ])
+    return next((str(value).strip() for value in candidates if value), "")
+
+def extract_platform(envelope: dict, events: list) -> str:
+    candidates = [envelope.get("platform")]
+    if events and isinstance(events[0], dict):
+        candidates.append(events[0].get("platform"))
+    return next((str(value).strip().lower() for value in candidates if value), "")
+
+def extract_source(envelope: dict, events: list) -> str:
+    candidates = [envelope.get("source")]
+    if events and isinstance(events[0], dict):
+        candidates.append(events[0].get("source"))
+    return next((str(value).strip().lower() for value in candidates if value), "")
+
+def extract_write_key(request: Request, envelope: dict, events: list) -> str:
+    auth = request.headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+
+    for header in ("x-bt-write-key", "x-site-write-key", "x-api-key"):
+        value = request.headers.get(header)
+        if value:
+            return value.strip()
+
+    candidates = [
+        envelope.get("write_key"),
+        envelope.get("public_write_key"),
+        envelope.get("server_secret_key"),
+        envelope.get("api_key"),
+    ]
+    if events and isinstance(events[0], dict):
+        candidates.extend([
+            events[0].get("write_key"),
+            events[0].get("public_write_key"),
+            events[0].get("server_secret_key"),
+            events[0].get("api_key"),
+        ])
+    return next((str(value).strip() for value in candidates if value), "")
+
+async def clickhouse_json(sql: str) -> list[dict]:
+    async with httpx.AsyncClient(timeout=4) as client:
+        response = await client.post(
+            CLICKHOUSE_HTTP_URL,
+            content=sql.strip() + "\nFORMAT JSONEachRow",
+            headers={"Content-Type": "text/plain; charset=utf-8"},
+        )
+        response.raise_for_status()
+    return [json.loads(line) for line in response.text.splitlines() if line.strip()]
+
+async def load_site_record(site_id: str) -> dict | None:
+    now = time.time()
+    cached = _site_registry_cache.get(site_id)
+    if cached and now - cached[0] < SITE_REGISTRY_CACHE_TTL_SECONDS:
+        return cached[1]
+
+    site_rows = await clickhouse_json(f"""
+        SELECT
+            site_id,
+            tenant_id,
+            domain,
+            platform,
+            allowed_origins,
+            status,
+            timezone
+        FROM tracer.sites
+        WHERE site_id = {sql_quote(site_id)}
+        ORDER BY updated_at DESC
+        LIMIT 1
+    """)
+    if not site_rows:
+        _site_registry_cache[site_id] = (now, None)
+        return None
+
+    key_rows = await clickhouse_json(f"""
+        SELECT key_type, key_hash, key_prefix, status
+        FROM tracer.site_keys FINAL
+        WHERE site_id = {sql_quote(site_id)}
+          AND status = 'active'
+          AND revoked_at IS NULL
+    """)
+    site = site_rows[0]
+    site["keys"] = key_rows
+    _site_registry_cache[site_id] = (now, site)
+    return site
+
+def is_origin_allowed(origin: str, referer: str, site: dict) -> bool:
+    allowed = site.get("allowed_origins") or []
+    if not allowed:
+        return True
+
+    candidates = [clean_origin(origin), clean_origin(referer)]
+    candidate_hosts = {origin_host(origin), origin_host(referer)}
+    for allowed_origin in allowed:
+        allowed_clean = clean_origin(str(allowed_origin))
+        allowed_host = origin_host(allowed_clean)
+        if allowed_clean in candidates or (allowed_host and allowed_host in candidate_hosts):
+            return True
+    return False
+
+def key_matches(site: dict, write_key: str, source: str) -> bool:
+    if not write_key:
+        return False
+    incoming_hash = hash_key(write_key)
+    expected_types = {"server_secret"} if source == "server_php" else {"public_write", "server_secret"}
+    for key in site.get("keys", []):
+        if key.get("key_type") not in expected_types:
+            continue
+        if hmac.compare_digest(str(key.get("key_hash") or ""), incoming_hash):
+            return True
+    return False
+
+async def validate_site_access(request: Request, envelope: dict, events: list) -> dict | None:
+    if not SITE_REGISTRY_ENABLED:
+        return None
+
+    site_id = extract_site_id(envelope, events)
+    if not site_id:
+        inc("events_auth_rejected_total", len(events))
+        raise HTTPException(status_code=403, detail="Missing site_id")
+
+    try:
+        site = await load_site_record(site_id)
+    except Exception as exc:
+        log.error("Site registry lookup failed | site=%s error=%s", site_id, exc)
+        raise HTTPException(status_code=503, detail="Site registry unavailable")
+
+    if not site:
+        inc("events_auth_rejected_total", len(events))
+        raise HTTPException(status_code=403, detail="Unknown site_id")
+    if str(site.get("status", "")).lower() != "active":
+        inc("events_auth_rejected_total", len(events))
+        raise HTTPException(status_code=403, detail="Site is inactive")
+
+    platform = extract_platform(envelope, events)
+    expected_platform = str(site.get("platform") or "").lower()
+    if expected_platform and expected_platform != "custom" and platform and platform != expected_platform:
+        inc("events_auth_rejected_total", len(events))
+        raise HTTPException(status_code=403, detail="Platform does not match registered site")
+
+    origin = request.headers.get("origin", "")
+    referer = request.headers.get("referer", "")
+    if not is_origin_allowed(origin, referer, site):
+        inc("events_auth_rejected_total", len(events))
+        raise HTTPException(status_code=403, detail="Origin is not allowed for this site")
+
+    source = extract_source(envelope, events)
+    write_key = extract_write_key(request, envelope, events)
+    if key_matches(site, write_key, source):
+        return site
+
+    if not write_key and SITE_REGISTRY_COMPAT_ALLOW_MISSING_KEY and (origin or referer):
+        log.warning("Compat auth allowed without write_key | site=%s origin=%s referer=%s", site_id, origin, referer)
+        return site
+
+    inc("events_auth_rejected_total", len(events))
+    raise HTTPException(status_code=401, detail="Invalid or missing write key")
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.get("/health")
 async def health():
@@ -333,6 +538,8 @@ async def health():
         "kafka_brokers": KAFKA_BROKERS,
         "topic": KAFKA_TOPIC,
         "cors_allow_origins": CORS_ALLOW_ORIGINS,
+        "site_registry_enabled": SITE_REGISTRY_ENABLED,
+        "site_registry_compat_allow_missing_key": SITE_REGISTRY_COMPAT_ALLOW_MISSING_KEY,
     }
 
 @app.get("/metrics", response_class=PlainTextResponse)
@@ -376,6 +583,8 @@ async def webhook(request: Request):
         events    = [data]
         is_unload = bool(data.get("is_unload", False))
         log.info("Single | worker=%s ip=%s type=%s", WORKER_ID, client_ip, data.get("event_type") or data.get("event", "?"))
+
+    await validate_site_access(request, envelope, events)
 
     inc("batches_received_total")
     inc("events_received_total", len(events))
