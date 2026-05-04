@@ -12,7 +12,8 @@ const BehaviourTrackerBuffer = {
         retryAttempts: 3,
         schemaVersion: '1.0',
         platform: 'wordpress',
-        source: 'client_js'
+        source: 'client_js',
+        writeKey: ''
     },
     timer: null,
     isFlushing: false,
@@ -37,6 +38,7 @@ const BehaviourTrackerBuffer = {
         this.config.platform = config.BT_PLATFORM || this.config.platform;
         this.config.source = config.BT_SOURCE || this.config.source;
         this.config.schemaVersion = config.BT_SCHEMA_VERSION || this.config.schemaVersion;
+        this.config.writeKey = config.BT_WRITE_KEY || config.BT_PUBLIC_WRITE_KEY || this.config.writeKey;
         this.debug = config.BT_DEBUG_MODE === '1' || config.BT_DEBUG_MODE === true;
         this.visitorId = this.resolveVisitorId();
 
@@ -157,6 +159,7 @@ const BehaviourTrackerBuffer = {
             schema_version: this.config.schemaVersion,
             site_id: this.getSiteId(),
             platform: this.getPlatform(),
+            write_key: this.getWriteKey(),
             source: this.config.source,
             sent_at: new Date().toISOString(),
             batch_timestamp: new Date().toISOString(),
@@ -224,7 +227,8 @@ const BehaviourTrackerBuffer = {
             'timestamp', 'session_id', 'visitor_id', 'user_id', 'customer_id', 'customer_email',
             'page', 'page_url', 'url', 'page_type', 'page_title', 'referrer_url', 'referrer',
             'screen_resolution', 'viewport_size', 'language', 'device_type', 'browser',
-            'site_id', 'siteId', 'website_id', 'context', 'properties', 'data'
+            'site_id', 'siteId', 'website_id', 'write_key', 'public_write_key', 'server_secret_key', 'api_key',
+            'context', 'properties', 'data'
         ];
 
         Object.keys(raw).forEach(key => {
@@ -270,6 +274,13 @@ const BehaviourTrackerBuffer = {
             return bt_config.BT_PLATFORM || this.config.platform;
         }
         return this.config.platform;
+    },
+
+    getWriteKey: function () {
+        if (typeof bt_config !== 'undefined') {
+            return bt_config.BT_WRITE_KEY || bt_config.BT_PUBLIC_WRITE_KEY || this.config.writeKey || '';
+        }
+        return this.config.writeKey || '';
     },
 
     resolveSessionId: function () {

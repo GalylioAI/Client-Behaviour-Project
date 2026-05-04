@@ -94,6 +94,9 @@ function bt_send_event($event_data)
 
     $config = include($config_file);
     $webhook_url = isset($config['webhook_url']) ? $config['webhook_url'] : '';
+    $server_secret_key = isset($config['server_secret_key'])
+        ? $config['server_secret_key']
+        : (isset($config['secret_key']) ? $config['secret_key'] : '');
 
     if (empty($webhook_url)) {
         return false;
@@ -130,6 +133,7 @@ function bt_send_event($event_data)
             'schema_version' => '1.0',
             'site_id' => $site_id,
             'platform' => 'wordpress',
+            'write_key' => $server_secret_key,
             'source' => 'server_php',
             'sent_at' => current_time('c'),
             'batch_timestamp' => current_time('c'),

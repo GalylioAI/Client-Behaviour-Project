@@ -3,7 +3,7 @@
  * Plugin Name: Behaviour Tracker for WordPress
  * Plugin URI: https://github.com/GalylioAI/Client-Behaviour-Project/tree/wp
  * Description: Tracks customer behaviour and sends data to a webhook for analysis. WordPress/WooCommerce Behaviour Tracker.
- * Version: 1.0.1
+ * Version: 1.0.2
  * Author: Galylio
  * Author URI: https://galylio.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('BT_VERSION', '1.0.1');
+define('BT_VERSION', '1.0.2');
 define('BT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('BT_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('BT_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -72,7 +72,7 @@ class BehaviourTrackerWordPress
         } else {
             // Default configuration
             $this->config = array(
-                'webhook_url' => '',
+                'webhook_url' => 'https://tracker.yatootunisie.tn/webhook',
                 'buffer_interval' => 10,
                 'enabled_sections' => array(
                     'session_navigation' => true,
@@ -195,6 +195,7 @@ class BehaviourTrackerWordPress
 
         // General
         add_option('bt_website_id', '');
+        add_option('bt_write_key', '');
     }
 
     /**
@@ -239,6 +240,7 @@ class BehaviourTrackerWordPress
     {
         return array(
             'bt_website_id',
+            'bt_write_key',
             'bt_sec_session_nav',
             'bt_event_page_view',
             'bt_el_pv_url',
@@ -398,6 +400,12 @@ class BehaviourTrackerWordPress
             : (isset($this->config['site_id'])
                 ? $this->config['site_id']
                 : (isset($this->config['website_id']) ? $this->config['website_id'] : ''));
+        $write_key_override = get_option('bt_write_key', '');
+        $write_key = !empty($write_key_override)
+            ? $write_key_override
+            : (isset($this->config['write_key'])
+                ? $this->config['write_key']
+                : (isset($this->config['public_write_key']) ? $this->config['public_write_key'] : ''));
 
         $config = array(
             // Section 1: Session & Navigation
@@ -461,6 +469,8 @@ class BehaviourTrackerWordPress
             'BT_SCHEMA_VERSION' => '1.0',
             'BT_SITE_ID' => $site_id,
             'BT_WEBSITE_ID' => $site_id, // Backward compatibility for older scripts.
+            'BT_WRITE_KEY' => $write_key,
+            'BT_PUBLIC_WRITE_KEY' => $write_key,
             'BT_PLATFORM' => 'wordpress',
             'BT_SOURCE' => 'client_js',
         );
