@@ -5,12 +5,10 @@ import Link from "next/link"
 import {
   Activity,
   AlertTriangle,
-  ArrowRight,
   BarChart3,
   Bell,
   Brain,
   CalendarDays,
-  CheckCircle2,
   ChevronDown,
   CircleDollarSign,
   Database,
@@ -21,7 +19,6 @@ import {
   Layers3,
   LayoutDashboard,
   LineChart as LineChartIcon,
-  LockKeyhole,
   LogOut,
   PackageSearch,
   Radio,
@@ -68,19 +65,78 @@ import { cn } from "@/lib/utils"
 
 const chartColors = ["#1769E8", "#14B8A6", "#6366F1", "#F59E0B", "#EF4444", "#64748B"]
 
+type DashboardView =
+  | "overview"
+  | "live"
+  | "funnels"
+  | "audience"
+  | "products"
+  | "ai"
+  | "reports"
+  | "sites"
+  | "pipelines"
+  | "settings"
+
+const viewMeta: Record<DashboardView, { title: string; description: string }> = {
+  overview: {
+    title: "Live Behaviour Intelligence Dashboard",
+    description: "A focused operating view for real-time ecommerce behavior, conversion leaks, product engagement, tenant health, and the AI/ML layer we will grow next.",
+  },
+  live: {
+    title: "Live Events",
+    description: "Watch accepted tracker events, event mix, recent traffic sources, and data freshness for this site.",
+  },
+  funnels: {
+    title: "Funnels",
+    description: "Understand where sessions move from product discovery to cart, checkout, and purchase.",
+  },
+  audience: {
+    title: "Audience",
+    description: "Review visitor loyalty, session quality, traffic channels, devices, and customer account signals.",
+  },
+  products: {
+    title: "Products",
+    description: "Rank products by views, clicks, add-to-cart activity, and engagement opportunities.",
+  },
+  ai: {
+    title: "AI Insights",
+    description: "Rules-based recommendations today, with model readiness signals for future ML scoring.",
+  },
+  reports: {
+    title: "Reports",
+    description: "Reusable reporting views for trends, event mix, traffic, exports, and operational quality.",
+  },
+  sites: {
+    title: "Sites",
+    description: "Manage the current website, installation status, plugin connection, and tenant boundaries.",
+  },
+  pipelines: {
+    title: "Pipelines",
+    description: "Monitor Layer 2 analysis jobs, infrastructure health, and data processing readiness.",
+  },
+  settings: {
+    title: "Settings",
+    description: "Review site configuration, allowed origins, platform, timezone, and security controls.",
+  },
+}
+
 const navigation = [
-  { label: "Dashboard", icon: LayoutDashboard, active: true, href: "/app" },
-  { label: "Live Events", icon: Activity },
-  { label: "Funnels", icon: BarChart3 },
-  { label: "Audience", icon: Users },
-  { label: "Products", icon: PackageSearch },
-  { label: "AI Insights", icon: Brain },
-  { label: "Reports", icon: LineChartIcon },
-  { label: "Sites", icon: Globe2, href: "/setup" },
+  { label: "Dashboard", icon: LayoutDashboard, view: "overview" as const },
+  { label: "Live Events", icon: Activity, view: "live" as const },
+  { label: "Funnels", icon: BarChart3, view: "funnels" as const },
+  { label: "Audience", icon: Users, view: "audience" as const },
+  { label: "Products", icon: PackageSearch, view: "products" as const },
+  { label: "AI Insights", icon: Brain, view: "ai" as const },
+  { label: "Reports", icon: LineChartIcon, view: "reports" as const },
+  { label: "Sites", icon: Globe2, view: "sites" as const },
   { label: "API Keys", icon: KeyRound, href: "/keys" },
-  { label: "Pipelines", icon: Workflow },
-  { label: "Settings", icon: Settings },
+  { label: "Pipelines", icon: Workflow, view: "pipelines" as const },
+  { label: "Settings", icon: Settings, view: "settings" as const },
 ]
+
+function normalizeView(value: string | null | undefined): DashboardView {
+  return value && value in viewMeta ? (value as DashboardView) : "overview"
+}
 
 function fmtInt(value: number) {
   return Math.round(value || 0).toLocaleString()
@@ -131,6 +187,43 @@ function timeAgo(value: string | null | undefined) {
 
 function cleanLabel(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function csvValue(value: string | number | null | undefined) {
+  const text = value == null ? "" : String(value)
+  return `"${text.replace(/"/g, '""')}"`
+}
+
+function downloadReportCsv(insights: BehaviorInsights) {
+  const siteId = insights.operations.site.site_id || "site"
+  const rows = [
+    ["section", "metric", "value", "extra"],
+    ["overview", "raw_events", insights.business_overview.reach.raw_events, ""],
+    ["overview", "sessions", insights.business_overview.reach.sessions, ""],
+    ["overview", "visitors", insights.business_overview.reach.visitors, ""],
+    ["overview", "purchase_rate_pct", insights.business_overview.conversion.session_to_purchase_rate_pct, ""],
+    ["overview", "checkout_conversion_pct", insights.business_overview.conversion.checkout_to_purchase_rate_pct, ""],
+    ...insights.commercial_funnel.stages.map((stage) => ["funnel", stage.stage, stage.sessions, `${stage.pct_of_all_sessions}% of sessions`]),
+    ...insights.daily_trends.map((day) => ["daily_trend", day.date, day.events, `${day.sessions} sessions, ${day.purchases} purchases`]),
+    ...Object.entries(insights.event_mix).map(([eventName, count]) => ["event_mix", eventName, count, "events"]),
+    ...insights.acquisition.top_referrers.map((referrer) => ["referrer", referrer.source, referrer.sessions, referrer.channel]),
+    ...insights.merchandising.top_products.map((product) => [
+      "product",
+      product.product_name || product.product_id,
+      product.product_views,
+      `${product.add_to_cart_events} add_to_cart, ${product.engagement_events} engagement`,
+    ]),
+  ]
+  const csv = rows.map((row) => row.map(csvValue).join(",")).join("\n")
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
+  const href = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = href
+  link.download = `${siteId}-behaviour-report.csv`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(href)
 }
 
 function StatusDot({
@@ -184,8 +277,9 @@ function Surface({
   )
 }
 
-function Sidebar({ siteDomain, siteId }: { siteDomain: string; siteId: string }) {
+function Sidebar({ siteDomain, siteId, activeView }: { siteDomain: string; siteId: string; activeView: DashboardView }) {
   const siteQuery = siteId ? `?site_id=${encodeURIComponent(siteId)}` : ""
+  const appHref = (view: DashboardView) => `/app?site_id=${encodeURIComponent(siteId)}&view=${encodeURIComponent(view)}`
 
   return (
     <aside className="hidden h-screen border-r border-slate-200 bg-white lg:sticky lg:top-0 lg:flex lg:flex-col">
@@ -219,10 +313,14 @@ function Sidebar({ siteDomain, siteId }: { siteDomain: string; siteId: string })
           )
           const className = cn(
             "flex h-9 w-full items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors",
-            item.active ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+            item.view === activeView ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
           )
 
-          return item.href ? (
+          return item.view ? (
+            <Link key={item.label} href={appHref(item.view)} className={className}>
+              {content}
+            </Link>
+          ) : item.href ? (
             <Link key={item.label} href={`${item.href}${siteQuery}`} className={className}>
               {content}
             </Link>
@@ -787,8 +885,421 @@ function CommandBar() {
   )
 }
 
-export function DashboardPageClient({ insights }: { insights: BehaviorInsights }) {
+function DeviceMixCard({ insights }: { insights: BehaviorInsights }) {
+  const rows = insights.audience.device_mix.slice(0, 6)
+  const max = Math.max(...rows.map((row) => row.sessions), 1)
+  return (
+    <Surface title="Device Mix" description="Sessions by detected device type.">
+      <div className="space-y-4">
+        {rows.map((row) => (
+          <div key={row.device_type} className="space-y-2">
+            <div className="flex items-center justify-between gap-4 text-xs">
+              <span className="font-medium text-slate-700">{cleanLabel(row.device_type || "unknown")}</span>
+              <span className="font-semibold tabular-nums text-slate-950">{fmtInt(row.sessions)} · {fmtPct(row.share_pct)}</span>
+            </div>
+            <div className="h-2 rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-blue-600" style={{ width: `${Math.max((row.sessions / max) * 100, row.sessions ? 8 : 0)}%` }} />
+            </div>
+          </div>
+        ))}
+        {!rows.length ? <p className="text-sm text-slate-500">No device data captured yet.</p> : null}
+      </div>
+    </Surface>
+  )
+}
+
+function CustomerSignalsCard({ insights }: { insights: BehaviorInsights }) {
+  return (
+    <Surface title="Customer Signals" description="Account, search, and newsletter behaviour observed for this site.">
+      <div className="space-y-3">
+        <MetricLine label="New sessions" value={fmtInt(insights.business_overview.customer_growth.new_sessions)} />
+        <MetricLine label="Returning sessions" value={fmtInt(insights.business_overview.customer_growth.returning_sessions)} />
+        <MetricLine label="Search adoption" value={fmtPct(insights.business_overview.customer_growth.search_adoption_pct)} />
+        <MetricLine label="Registrations" value={fmtInt(insights.customer.accounts.registration_events)} />
+        <MetricLine label="Newsletter opt-in" value={fmtPct(insights.customer.newsletter.opt_in_rate_pct)} />
+      </div>
+    </Surface>
+  )
+}
+
+function DataCoverageCard({ insights }: { insights: BehaviorInsights }) {
+  const quality = buildDataQuality(insights)
+  const rows = quality.columns.slice(0, 8)
+  return (
+    <Surface title="Data Coverage" description="How complete the important tracker fields are.">
+      <div className="space-y-3">
+        {rows.map((row) => (
+          <div key={row.column} className="space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-medium text-slate-600">{cleanLabel(row.column)}</span>
+              <span className="font-semibold text-slate-950">{fmtPct(row.fillRate)}</span>
+            </div>
+            <div className="h-2 rounded-full bg-slate-100">
+              <div
+                className={cn("h-full rounded-full", row.fillRate >= 80 ? "bg-emerald-500" : row.fillRate >= 45 ? "bg-amber-500" : "bg-red-500")}
+                style={{ width: `${Math.max(Math.min(row.fillRate, 100), row.fillRate ? 6 : 0)}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </Surface>
+  )
+}
+
+function SiteControlsCard({ insights }: { insights: BehaviorInsights }) {
+  const site = insights.operations.site
+  const siteId = site.site_id || "tdiscount"
+  return (
+    <Surface title="Website Workspace" description="Operational controls for the selected website.">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Button asChild className="bg-blue-600 hover:bg-blue-700">
+          <Link href={`/connect?site_id=${encodeURIComponent(siteId)}`}>
+            <PlugZapIcon />
+            Connect
+          </Link>
+        </Button>
+        <Button asChild variant="outline" className="border-slate-200 bg-white text-slate-700">
+          <Link href={`/debug?site_id=${encodeURIComponent(siteId)}`}>
+            <Activity className="h-4 w-4" />
+            Debug
+          </Link>
+        </Button>
+        <Button asChild variant="outline" className="border-slate-200 bg-white text-slate-700">
+          <Link href={`/keys?site_id=${encodeURIComponent(siteId)}`}>
+            <KeyRound className="h-4 w-4" />
+            Keys
+          </Link>
+        </Button>
+        <Button asChild variant="outline" className="border-slate-200 bg-white text-slate-700">
+          <Link href={`/downloads?site_id=${encodeURIComponent(siteId)}`}>
+            <Download className="h-4 w-4" />
+            Plugins
+          </Link>
+        </Button>
+      </div>
+    </Surface>
+  )
+}
+
+function PlugZapIcon() {
+  return <Radio className="h-4 w-4" />
+}
+
+function SiteConfigurationCard({ insights }: { insights: BehaviorInsights }) {
+  const site = insights.operations.site
+  return (
+    <Surface title="Site Configuration" description="Current tenant and tracker configuration loaded from ClickHouse.">
+      <div className="grid gap-5 lg:grid-cols-2">
+        <div className="space-y-3">
+          <MetricLine label="Site ID" value={site.site_id || "Not set"} />
+          <MetricLine label="Domain" value={site.domain || "Not set"} />
+          <MetricLine label="Tenant" value={site.tenant_id || "Not set"} />
+          <MetricLine label="Platform" value={site.platform || "Not set"} />
+          <MetricLine label="Timezone" value={site.timezone || "UTC"} />
+          <MetricLine label="Plan" value={site.plan || "starter"} />
+        </div>
+        <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Allowed origins</div>
+          <div className="mt-3 space-y-2">
+            {site.allowed_origins.length ? (
+              site.allowed_origins.map((origin) => (
+                <div key={origin} className="truncate rounded-md bg-white px-2 py-1.5 text-xs font-medium text-slate-700 ring-1 ring-slate-200">
+                  {origin}
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-slate-500">No origins configured.</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </Surface>
+  )
+}
+
+function KeyOperationsCard({ insights }: { insights: BehaviorInsights }) {
+  const keys = insights.operations.keys
+  return (
+    <Surface title="Key Operations" description="Active and historical tracker keys for this site.">
+      <div className="space-y-3">
+        {keys.map((key) => (
+          <div key={`${key.key_type}-${key.key_prefix}-${key.created_at}`} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-100 bg-slate-50 p-3">
+            <div>
+              <div className="text-sm font-semibold text-slate-950">{key.key_prefix || "revoked key"}</div>
+              <div className="mt-1 text-xs text-slate-500">{cleanLabel(key.key_type)} · created {timeAgo(key.created_at)}</div>
+            </div>
+            <Badge variant="outline" className={cn(key.status === "active" ? "border-emerald-100 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-500")}>
+              {cleanLabel(key.status)}
+            </Badge>
+          </div>
+        ))}
+        {!keys.length ? <p className="text-sm text-slate-500">No keys found for this site.</p> : null}
+      </div>
+    </Surface>
+  )
+}
+
+function InfrastructureHealthCard({ insights }: { insights: BehaviorInsights }) {
+  const latestRun = insights.operations.analysis_runs[0]
+  return (
+    <Surface title="Infrastructure Health" description="Service status based on current application configuration and recent pipeline data.">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <HealthRow icon={Database} label="ClickHouse" value="Healthy" />
+        <HealthRow icon={Server} label="Kafka" value="Healthy" />
+        <HealthRow icon={Workflow} label="Airflow" value={latestRun ? "Latest run found" : "Waiting"} />
+        <HealthRow icon={ShieldCheck} label="Bridge auth" value="Registry enabled" />
+      </div>
+    </Surface>
+  )
+}
+
+function ReportExportCard({ insights }: { insights: BehaviorInsights }) {
+  const siteId = insights.operations.site.site_id || "tdiscount"
+  return (
+    <Surface title="Report Actions" description="Export and reporting actions that will later become scheduled reports.">
+      <div className="grid gap-3 md:grid-cols-3">
+        <Button type="button" variant="outline" className="border-slate-200 bg-white text-slate-700" onClick={() => downloadReportCsv(insights)}>
+          <Download className="h-4 w-4" />
+          Export CSV
+        </Button>
+        <Button asChild variant="outline" className="border-slate-200 bg-white text-slate-700">
+          <Link href={`/debug?site_id=${encodeURIComponent(siteId)}`}>
+            <Activity className="h-4 w-4" />
+            Inspect data
+          </Link>
+        </Button>
+        <Button asChild variant="outline" className="border-slate-200 bg-white text-slate-700">
+          <Link href="/emails">
+            <Send className="h-4 w-4" />
+            Email outbox
+          </Link>
+        </Button>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <Button asChild variant="outline" className="border-slate-200 bg-white text-slate-700">
+          <Link href={`/connect?site_id=${encodeURIComponent(siteId)}`}>
+            <Radio className="h-4 w-4" />
+            Connect tracker
+          </Link>
+        </Button>
+        <Button asChild variant="outline" className="border-slate-200 bg-white text-slate-700">
+          <Link href={`/downloads?site_id=${encodeURIComponent(siteId)}`}>
+            <Download className="h-4 w-4" />
+            Plugin packages
+          </Link>
+        </Button>
+      </div>
+      <div className="mt-4 rounded-md border border-slate-100 bg-slate-50 p-3 text-sm leading-6 text-slate-600">
+        Current report window contains {fmtInt(insights.dataset.rows)} raw events and {fmtInt(insights.business_overview.reach.sessions)} sessions.
+      </div>
+    </Surface>
+  )
+}
+
+function ComingReportCard() {
+  return (
+    <Surface title="Scheduled Reports" description="Next automation layer for customer-facing reports.">
+      <div className="space-y-3">
+        <HealthRow icon={LineChartIcon} label="Weekly PDF" value="Planned" />
+        <HealthRow icon={Send} label="Automatic email" value="Planned" />
+        <HealthRow icon={ShieldCheck} label="Tenant isolation" value="Ready" />
+      </div>
+    </Surface>
+  )
+}
+
+type MetricCardData = {
+  label: string
+  value: string
+  helper: string
+  icon: typeof Activity
+  tone: "blue" | "teal" | "indigo" | "amber"
+}
+
+function ActiveViewContent({
+  view,
+  insights,
+  metricCards,
+  kpis,
+}: {
+  view: DashboardView
+  insights: BehaviorInsights
+  metricCards: MetricCardData[]
+  kpis: ReturnType<typeof buildKpis>
+}) {
+  switch (view) {
+    case "live":
+      return (
+        <>
+          <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
+            <MetricCard label="Raw events" value={fmtInt(insights.business_overview.reach.raw_events)} helper="Events in the current analysis window" icon={Activity} tone="blue" />
+            <MetricCard label="Recent stream" value={fmtInt(insights.operations.recent_events.length)} helper="Rows loaded into the live stream" icon={Radio} tone="teal" />
+            <MetricCard label="Event types" value={fmtInt(Object.keys(insights.event_mix).length)} helper="Distinct event names observed" icon={Layers3} tone="indigo" />
+            <MetricCard label="Freshness" value={timeAgo(insights.operations.recent_events[0]?.received_at || insights.dataset.date_range_utc.max)} helper="Latest accepted event" icon={RefreshCw} tone="amber" />
+          </section>
+          <section className="grid gap-5 xl:grid-cols-3">
+            <LiveEventStream insights={insights} />
+            <EventMixCard insights={insights} />
+          </section>
+          <section className="grid gap-5 xl:grid-cols-2">
+            <TrafficCard insights={insights} />
+            <DataCoverageCard insights={insights} />
+          </section>
+        </>
+      )
+    case "funnels":
+      return (
+        <>
+          <section className="grid gap-5 xl:grid-cols-3">
+            <FunnelCard insights={insights} />
+            <TrendsCard insights={insights} />
+          </section>
+          <section className="grid gap-5 xl:grid-cols-2">
+            <AIAlertCard insights={insights} />
+            <SessionQualityCard insights={insights} />
+          </section>
+        </>
+      )
+    case "audience":
+      return (
+        <>
+          <section className="grid gap-5 xl:grid-cols-2">
+            <DeviceMixCard insights={insights} />
+            <CustomerSignalsCard insights={insights} />
+          </section>
+          <section className="grid gap-5 xl:grid-cols-2">
+            <TrafficCard insights={insights} />
+            <SessionQualityCard insights={insights} />
+          </section>
+        </>
+      )
+    case "products":
+      return (
+        <>
+          <section className="grid gap-5 xl:grid-cols-2">
+            <ProductEngagementCard insights={insights} />
+            <AIAlertCard insights={insights} />
+          </section>
+          <section className="grid gap-5 xl:grid-cols-2">
+            <EventMixCard insights={insights} />
+            <DataCoverageCard insights={insights} />
+          </section>
+        </>
+      )
+    case "ai":
+      return (
+        <>
+          <section className="grid gap-5 xl:grid-cols-2">
+            <AIAlertCard insights={insights} />
+            <ModelReadinessCard insights={insights} />
+          </section>
+          <section className="grid gap-5 xl:grid-cols-2">
+            <ProductEngagementCard insights={insights} />
+            <SessionQualityCard insights={insights} />
+          </section>
+          <CommandBar />
+        </>
+      )
+    case "reports":
+      return (
+        <>
+          <section className="grid gap-5 xl:grid-cols-3">
+            <TrendsCard insights={insights} />
+            <EventMixCard insights={insights} />
+          </section>
+          <section className="grid gap-5 xl:grid-cols-2">
+            <TrafficCard insights={insights} />
+            <ReportExportCard insights={insights} />
+          </section>
+          <ComingReportCard />
+        </>
+      )
+    case "sites":
+      return (
+        <>
+          <SiteControlsCard insights={insights} />
+          <section className="grid gap-5 xl:grid-cols-2">
+            <SiteConfigurationCard insights={insights} />
+            <KeyOperationsCard insights={insights} />
+          </section>
+          <InfrastructureHealthCard insights={insights} />
+        </>
+      )
+    case "pipelines":
+      return (
+        <>
+          <section className="grid gap-5 xl:grid-cols-2">
+            <PipelineHealthCard insights={insights} />
+            <ModelReadinessCard insights={insights} />
+          </section>
+          <InfrastructureHealthCard insights={insights} />
+          <DataCoverageCard insights={insights} />
+        </>
+      )
+    case "settings":
+      return (
+        <>
+          <section className="grid gap-5 xl:grid-cols-2">
+            <SiteConfigurationCard insights={insights} />
+            <KeyOperationsCard insights={insights} />
+          </section>
+          <SiteControlsCard insights={insights} />
+          <DataCoverageCard insights={insights} />
+        </>
+      )
+    case "overview":
+    default:
+      return (
+        <>
+          <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
+            {metricCards.map((card) => (
+              <MetricCard key={card.label} {...card} />
+            ))}
+          </section>
+
+          <section className="grid gap-5 xl:grid-cols-3">
+            <LiveEventStream insights={insights} />
+            <FunnelCard insights={insights} />
+          </section>
+
+          <section className="grid gap-5 xl:grid-cols-2">
+            <TrafficCard insights={insights} />
+            <AIAlertCard insights={insights} />
+          </section>
+
+          <section className="grid gap-5 xl:grid-cols-2">
+            <ProductEngagementCard insights={insights} />
+            <SessionQualityCard insights={insights} />
+          </section>
+
+          <section className="grid gap-5 xl:grid-cols-3">
+            <TrendsCard insights={insights} />
+            <EventMixCard insights={insights} />
+          </section>
+
+          <section className="grid gap-5 xl:grid-cols-2">
+            <PipelineHealthCard insights={insights} />
+            <ModelReadinessCard insights={insights} />
+          </section>
+
+          <section className="grid gap-4 rounded-lg border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.05)] md:grid-cols-3">
+            {kpis.slice(4, 6).map((item) => (
+              <MetricLine key={item.id} label={item.label} value={item.formattedValue} />
+            ))}
+            <MetricLine label="Raw events" value={fmtInt(insights.business_overview.reach.raw_events)} />
+          </section>
+
+          <CommandBar />
+        </>
+      )
+  }
+}
+
+export function DashboardPageClient({ insights, initialView }: { insights: BehaviorInsights; initialView?: string }) {
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const activeView = normalizeView(initialView)
+  const meta = viewMeta[activeView]
   const kpis = buildKpis(insights)
   const site = insights.operations.site
   const latestEvent = insights.operations.recent_events[0]?.received_at || insights.dataset.date_range_utc.max
@@ -841,7 +1352,7 @@ export function DashboardPageClient({ insights }: { insights: BehaviorInsights }
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <div className="grid min-h-screen lg:grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)_360px]">
-        <Sidebar siteDomain={site.domain} siteId={site.site_id || "tdiscount"} />
+        <Sidebar siteDomain={site.domain} siteId={site.site_id || "tdiscount"} activeView={activeView} />
 
         <main className="min-w-0">
           <Topbar siteLabel={site.domain || site.site_id || "tdiscount"} siteId={site.site_id || "tdiscount"} latestEvent={latestEvent} />
@@ -858,10 +1369,10 @@ export function DashboardPageClient({ insights }: { insights: BehaviorInsights }
                     <span className="text-xs text-slate-400">site_id: {site.site_id}</span>
                   </div>
                   <h1 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950 md:text-[32px] md:leading-10">
-                    Live Behaviour Intelligence Dashboard
+                    {meta.title}
                   </h1>
                   <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-                    A focused operating view for real-time ecommerce behavior, conversion leaks, product engagement, tenant health, and the AI/ML layer we will grow next.
+                    {meta.description}
                   </p>
                 </div>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -893,45 +1404,7 @@ export function DashboardPageClient({ insights }: { insights: BehaviorInsights }
               </div>
             </section>
 
-            <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
-              {metricCards.map((card) => (
-                <MetricCard key={card.label} {...card} />
-              ))}
-            </section>
-
-            <section className="grid gap-5 xl:grid-cols-3">
-              <LiveEventStream insights={insights} />
-              <FunnelCard insights={insights} />
-            </section>
-
-            <section className="grid gap-5 xl:grid-cols-2">
-              <TrafficCard insights={insights} />
-              <AIAlertCard insights={insights} />
-            </section>
-
-            <section className="grid gap-5 xl:grid-cols-2">
-              <ProductEngagementCard insights={insights} />
-              <SessionQualityCard insights={insights} />
-            </section>
-
-            <section className="grid gap-5 xl:grid-cols-3">
-              <TrendsCard insights={insights} />
-              <EventMixCard insights={insights} />
-            </section>
-
-            <section className="grid gap-5 xl:grid-cols-2">
-              <PipelineHealthCard insights={insights} />
-              <ModelReadinessCard insights={insights} />
-            </section>
-
-            <section className="grid gap-4 rounded-lg border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.05)] md:grid-cols-3">
-              {kpis.slice(4, 6).map((item) => (
-                <MetricLine key={item.id} label={item.label} value={item.formattedValue} />
-              ))}
-              <MetricLine label="Raw events" value={fmtInt(insights.business_overview.reach.raw_events)} />
-            </section>
-
-            <CommandBar />
+            <ActiveViewContent view={activeView} insights={insights} metricCards={metricCards} kpis={kpis} />
           </div>
         </main>
 

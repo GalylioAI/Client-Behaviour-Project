@@ -13,9 +13,12 @@ type DashboardPageProps = {
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const params = searchParams ? await searchParams : {}
   const rawSiteId = params.site_id
+  const rawView = params.view
   const siteId = Array.isArray(rawSiteId) ? rawSiteId[0] : rawSiteId
-  const session = await requireSession(siteId ? `/app?site_id=${encodeURIComponent(siteId)}` : "/app")
+  const view = Array.isArray(rawView) ? rawView[0] : rawView
+  const next = `/app${siteId ? `?site_id=${encodeURIComponent(siteId)}${view ? `&view=${encodeURIComponent(view)}` : ""}` : view ? `?view=${encodeURIComponent(view)}` : ""}`
+  const session = await requireSession(next)
   const selectedSiteId = await resolveTenantSiteId(session.tenant_id, siteId)
   const insights = await loadInsights(selectedSiteId)
-  return <DashboardPageClient insights={insights} />
+  return <DashboardPageClient insights={insights} initialView={view} />
 }
