@@ -10,7 +10,7 @@ import { prepareOnboardingEmail } from "@/lib/onboarding-email"
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
-const VALID_PLATFORMS = new Set(["wordpress", "prestashop", "shopify", "magento", "custom"])
+const VALID_PLATFORMS = new Set(["wordpress", "prestashop"])
 
 function slug(value: string) {
   return value
@@ -101,7 +101,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Site ID could not be generated." }, { status: 400 })
     }
     if (!VALID_PLATFORMS.has(platform)) {
-      return NextResponse.json({ error: "Platform must be wordpress, prestashop, shopify, magento, or custom." }, { status: 400 })
+      return NextResponse.json({ error: "Platform must be wordpress or prestashop." }, { status: 400 })
     }
     if (!session && password.length < 8) {
       return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 })

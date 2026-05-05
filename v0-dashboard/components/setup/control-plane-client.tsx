@@ -38,9 +38,6 @@ type RegistrationResult = {
 const platformOptions = [
   { label: "WordPress", value: "wordpress" },
   { label: "PrestaShop", value: "prestashop" },
-  { label: "Shopify", value: "shopify" },
-  { label: "Magento", value: "magento" },
-  { label: "Custom", value: "custom" },
 ]
 
 function timeAgo(value: string | null) {

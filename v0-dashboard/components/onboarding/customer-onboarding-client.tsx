@@ -48,7 +48,6 @@ type ProvisionedSite = {
 const platforms = [
   { value: "prestashop", label: "PrestaShop" },
   { value: "wordpress", label: "WordPress" },
-  { value: "custom", label: "Custom" },
 ]
 
 function copy(value: string) {
