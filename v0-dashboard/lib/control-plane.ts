@@ -1,4 +1,4 @@
-import { clickhouseCommand, clickhouseQuery, num, str } from "@/lib/clickhouse"
+import { clickhouseCommand, clickhouseQuery, num, sqlString, str } from "@/lib/clickhouse"
 
 export interface TenantRecord {
   tenant_id: string
@@ -52,8 +52,9 @@ export async function ensureControlPlaneSchema() {
   `)
 }
 
-export async function loadControlPlane(): Promise<ControlPlaneData> {
+export async function loadControlPlane(tenantId?: string): Promise<ControlPlaneData> {
   await ensureControlPlaneSchema()
+  const tenantFilter = tenantId ? `WHERE tenant_id = ${sqlString(tenantId)}` : ""
 
   const [tenantRows, siteRows, eventRows, keyRows] = await Promise.all([
     clickhouseQuery(`
@@ -66,6 +67,7 @@ export async function loadControlPlane(): Promise<ControlPlaneData> {
         created_at,
         updated_at
       FROM tracer.tenants
+      ${tenantFilter}
       ORDER BY updated_at DESC
       LIMIT 50
     `),
@@ -82,6 +84,7 @@ export async function loadControlPlane(): Promise<ControlPlaneData> {
         created_at,
         updated_at
       FROM tracer.sites
+      ${tenantFilter}
       ORDER BY updated_at DESC
       LIMIT 100
     `),
@@ -92,6 +95,7 @@ export async function loadControlPlane(): Promise<ControlPlaneData> {
         max(received_at) AS latest_event
       FROM tracer.ecommerce_events
       WHERE event_timestamp >= now() - INTERVAL 7 DAY
+        ${tenantId ? `AND site_id IN (SELECT site_id FROM tracer.sites WHERE tenant_id = ${sqlString(tenantId)})` : ""}
       GROUP BY site_id
     `),
     clickhouseQuery(`
@@ -101,6 +105,7 @@ export async function loadControlPlane(): Promise<ControlPlaneData> {
         countIf(key_type = 'server_secret' AND status = 'active' AND revoked_at IS NULL) AS server_key_count,
         groupArrayIf(key_prefix, status = 'active' AND revoked_at IS NULL) AS key_prefixes
       FROM tracer.site_keys FINAL
+      ${tenantId ? `WHERE site_id IN (SELECT site_id FROM tracer.sites WHERE tenant_id = ${sqlString(tenantId)})` : ""}
       GROUP BY site_id
     `),
   ])

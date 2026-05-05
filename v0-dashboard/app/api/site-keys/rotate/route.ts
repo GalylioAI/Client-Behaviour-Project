@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { getSessionFromRequest } from "@/lib/auth"
 import { rotateSiteKey, type ManagedKeyType } from "@/lib/site-keys"
 
 export const dynamic = "force-dynamic"
@@ -9,6 +10,11 @@ const VALID_KEY_TYPES = new Set(["public_write", "server_secret"])
 
 export async function POST(request: Request) {
   try {
+    const session = getSessionFromRequest(request)
+    if (!session) {
+      return NextResponse.json({ error: "Authentication required." }, { status: 401 })
+    }
+
     const body = await request.json()
     const siteId = String(body.site_id || "").trim()
     const keyType = String(body.key_type || "public_write").trim()
@@ -21,13 +27,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "key_type must be public_write or server_secret." }, { status: 400 })
     }
 
-    const result = await rotateSiteKey(siteId, keyType as ManagedKeyType)
+    const result = await rotateSiteKey(siteId, keyType as ManagedKeyType, session.tenant_id)
     return NextResponse.json({
       ...result,
       note: "Raw key is shown once. ClickHouse stores only the SHA-256 hash.",
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error"
-    return NextResponse.json({ error: message }, { status: 500 })
+    const status = message.startsWith("Active site") ? 404 : 500
+    return NextResponse.json({ error: message }, { status })
   }
 }

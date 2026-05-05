@@ -69,8 +69,9 @@ function keyHash(value: string) {
   return createHash("sha256").update(value, "utf8").digest("hex")
 }
 
-export async function loadApiKeyManagement(siteId?: string): Promise<ApiKeyManagementData> {
+export async function loadApiKeyManagement(siteId?: string, tenantId?: string): Promise<ApiKeyManagementData> {
   const requestedSiteId = getSiteId(siteId)
+  const tenantFilter = tenantId ? `WHERE tenant_id = ${sqlString(tenantId)}` : ""
 
   const siteRows = await clickhouseQuery(`
     SELECT
@@ -83,6 +84,7 @@ export async function loadApiKeyManagement(siteId?: string): Promise<ApiKeyManag
       timezone,
       allowed_origins
     FROM tracer.sites
+    ${tenantFilter}
     ORDER BY updated_at DESC
     LIMIT 100
   `)
@@ -159,7 +161,7 @@ export async function loadApiKeyManagement(siteId?: string): Promise<ApiKeyManag
   }
 }
 
-export async function rotateSiteKey(siteId: string, keyType: ManagedKeyType): Promise<RotatedKeyResult> {
+export async function rotateSiteKey(siteId: string, keyType: ManagedKeyType, tenantId?: string): Promise<RotatedKeyResult> {
   const normalizedSiteId = siteId.trim()
   const normalizedKeyType = normalizeKeyType(keyType)
 
@@ -171,6 +173,7 @@ export async function rotateSiteKey(siteId: string, keyType: ManagedKeyType): Pr
     SELECT count() AS rows
     FROM tracer.sites
     WHERE site_id = ${sqlString(normalizedSiteId)}
+      ${tenantId ? `AND tenant_id = ${sqlString(tenantId)}` : ""}
       AND status = 'active'
   `)
 
@@ -178,8 +181,8 @@ export async function rotateSiteKey(siteId: string, keyType: ManagedKeyType): Pr
     throw new Error(`Active site "${normalizedSiteId}" was not found.`)
   }
 
-  const activeRows = await clickhouseQuery<{ key_id: string; created_at: string }>(`
-    SELECT key_id, created_at
+  const activeRows = await clickhouseQuery<{ key_id: string; key_prefix: string; key_hash: string; created_at: string }>(`
+    SELECT key_id, key_prefix, key_hash, created_at
     FROM tracer.site_keys FINAL
     WHERE site_id = ${sqlString(normalizedSiteId)}
       AND key_type = ${sqlString(normalizedKeyType)}
@@ -197,8 +200,8 @@ export async function rotateSiteKey(siteId: string, keyType: ManagedKeyType): Pr
         ${sqlString(str(row.key_id))},
         ${sqlString(normalizedSiteId)},
         ${sqlString(normalizedKeyType)},
-        '',
-        ${sqlString("0".repeat(64))},
+        ${sqlString(str(row.key_prefix))},
+        ${sqlString(str(row.key_hash))},
         'revoked',
         ${sqlString(str(row.created_at))},
         now64(3),

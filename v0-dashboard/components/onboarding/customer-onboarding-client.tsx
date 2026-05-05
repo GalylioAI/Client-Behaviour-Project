@@ -105,6 +105,8 @@ export function CustomerOnboardingClient() {
   const [form, setForm] = useState({
     tenant_name: "",
     admin_email: "",
+    password: "",
+    confirm_password: "",
     domain: "",
     platform: "prestashop",
     site_id: "",
@@ -124,12 +126,19 @@ export function CustomerOnboardingClient() {
     setError("")
     setSite(null)
 
+    if (form.password !== form.confirm_password) {
+      setError("Passwords do not match.")
+      setStatus("idle")
+      return
+    }
+
     try {
       const response = await fetch("/api/sites/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
+          confirm_password: undefined,
           plan: "starter",
           timezone: "Africa/Tunis",
         }),
@@ -160,8 +169,8 @@ export function CustomerOnboardingClient() {
             </div>
           </div>
           <Button asChild variant="outline" className="border-slate-200 bg-white text-slate-700">
-            <Link href="/">
-              Dashboard
+            <Link href="/login">
+              Log In
               <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>
@@ -204,6 +213,27 @@ export function CustomerOnboardingClient() {
                 disabled={status === "submitting"}
               />
             </Field>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Password">
+                <Input
+                  type="password"
+                  value={form.password}
+                  onChange={(event) => update("password", event.target.value)}
+                  placeholder="At least 8 characters"
+                  disabled={status === "submitting"}
+                />
+              </Field>
+              <Field label="Confirm password">
+                <Input
+                  type="password"
+                  value={form.confirm_password}
+                  onChange={(event) => update("confirm_password", event.target.value)}
+                  placeholder="Repeat password"
+                  disabled={status === "submitting"}
+                />
+              </Field>
+            </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Domain">

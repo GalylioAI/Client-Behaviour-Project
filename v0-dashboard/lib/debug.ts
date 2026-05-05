@@ -141,7 +141,8 @@ async function loadBridgeStatus(): Promise<BridgeStatus> {
   }
 }
 
-export async function loadDebugData(siteId?: string): Promise<DebugData> {
+export async function loadDebugData(siteId?: string, tenantId?: string): Promise<DebugData> {
+  const tenantFilter = tenantId ? `WHERE tenant_id = ${sqlString(tenantId)}` : ""
   const siteRows = await safeQuery(`
     SELECT
       site_id,
@@ -151,11 +152,12 @@ export async function loadDebugData(siteId?: string): Promise<DebugData> {
       status,
       allowed_origins
     FROM tracer.sites
+    ${tenantFilter}
     ORDER BY updated_at DESC
     LIMIT 100
   `)
 
-  const selectedSiteId = siteId || str(siteRows[0]?.site_id, "tdiscount")
+  const selectedSiteId = siteRows.some((row) => str(row.site_id) === siteId) ? siteId || "" : str(siteRows[0]?.site_id, siteId || "tdiscount")
   const quotedSite = sqlString(selectedSiteId)
 
   const [eventStatsRows, auditStatsRows, keyRows, auditRows, recentEventRows, fieldRows, bridge] = await Promise.all([

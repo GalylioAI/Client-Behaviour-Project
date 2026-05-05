@@ -22,6 +22,7 @@ import {
   LayoutDashboard,
   LineChart as LineChartIcon,
   LockKeyhole,
+  LogOut,
   PackageSearch,
   Radio,
   RefreshCw,
@@ -244,6 +245,11 @@ function Sidebar({ siteDomain, siteId }: { siteDomain: string; siteId: string })
 }
 
 function Topbar({ siteLabel, siteId, latestEvent }: { siteLabel: string; siteId: string; latestEvent: string | null }) {
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" })
+    window.location.href = "/login"
+  }
+
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-4 border-b border-slate-200 bg-white/90 px-4 backdrop-blur md:px-6">
       <div className="flex min-w-0 items-center gap-3">
@@ -293,6 +299,9 @@ function Topbar({ siteLabel, siteId, latestEvent }: { siteLabel: string; siteId:
           <div className="grid h-5 w-5 place-items-center rounded-full bg-slate-900 text-[10px] font-semibold text-white">IS</div>
           <span className="text-xs font-medium text-slate-700">Admin</span>
         </div>
+        <Button type="button" variant="ghost" size="icon-sm" className="text-slate-500" onClick={logout}>
+          <LogOut className="h-4 w-4" />
+        </Button>
       </div>
     </header>
   )

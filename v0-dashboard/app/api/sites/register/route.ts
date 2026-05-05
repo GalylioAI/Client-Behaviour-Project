@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto"
 
 import { NextResponse } from "next/server"
 
+import { ensureAuthSchema, findUserByEmail, getSessionFromRequest, hashPassword, setSessionCookie } from "@/lib/auth"
 import { clickhouseCommand, clickhouseQuery, sqlArray, sqlString } from "@/lib/clickhouse"
 import { ensureControlPlaneSchema } from "@/lib/control-plane"
 import { prepareOnboardingEmail } from "@/lib/onboarding-email"
@@ -75,15 +76,17 @@ async function insertStatement(sql: string) {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
+    const session = getSessionFromRequest(request)
     const tenantName = String(body.tenant_name || "").trim()
-    const adminEmail = String(body.admin_email || "").trim().toLowerCase()
+    const adminEmail = String(session?.email || body.admin_email || "").trim().toLowerCase()
     const domain = normalizeDomain(String(body.domain || ""))
     const platform = String(body.platform || "").trim().toLowerCase()
     const plan = String(body.plan || "starter").trim().toLowerCase() || "starter"
     const timezone = String(body.timezone || "Africa/Tunis").trim() || "Africa/Tunis"
-    const tenantId = String(body.tenant_id || `tenant_${slug(tenantName || domain)}`).trim()
+    const tenantId = String(session?.tenant_id || body.tenant_id || `tenant_${slug(tenantName || domain)}`).trim()
     const siteId = String(body.site_id || slug(domain)).trim()
     const allowedOrigins = parseOrigins(body.allowed_origins, domain)
+    const password = String(body.password || "")
 
     if (!tenantName) {
       return NextResponse.json({ error: "Tenant name is required." }, { status: 400 })
@@ -100,8 +103,19 @@ export async function POST(request: Request) {
     if (!VALID_PLATFORMS.has(platform)) {
       return NextResponse.json({ error: "Platform must be wordpress, prestashop, shopify, magento, or custom." }, { status: 400 })
     }
+    if (!session && password.length < 8) {
+      return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 })
+    }
 
     await ensureControlPlaneSchema()
+    await ensureAuthSchema()
+
+    if (!session) {
+      const existingUser = await findUserByEmail(adminEmail)
+      if (existingUser?.password_hash) {
+        return NextResponse.json({ error: "An account already exists for this email. Please log in instead." }, { status: 409 })
+      }
+    }
 
     const existingSiteRows = await clickhouseQuery<{ rows: number }>(`
       SELECT count() AS rows
@@ -118,9 +132,10 @@ export async function POST(request: Request) {
     const now = Date.now().toString(36)
     const publicKey = makeKey("pk_live_")
     const serverKey = makeKey("sk_live_")
-    const userId = `user_${slug(adminEmail)}`
+    const userId = session?.user_id || `user_${slug(adminEmail)}`
     const publicKeyId = `key_${siteId}_public_${now}`
     const serverKeyId = `key_${siteId}_server_${now}`
+    const passwordHash = session ? "" : hashPassword(password)
 
     await insertStatement(`
       INSERT INTO tracer.tenants
@@ -129,12 +144,25 @@ export async function POST(request: Request) {
         (${sqlString(tenantId)}, ${sqlString(tenantName)}, ${sqlString(adminEmail)}, ${sqlString(plan)}, 'active', now64(3), now64(3))
     `)
 
-    await insertStatement(`
-      INSERT INTO tracer.tenant_users
-        (user_id, tenant_id, email, full_name, role, status, created_at, updated_at)
-      VALUES
-        (${sqlString(userId)}, ${sqlString(tenantId)}, ${sqlString(adminEmail)}, ${sqlString(tenantName)}, 'owner', 'active', now64(3), now64(3))
-    `)
+    if (!session) {
+      await insertStatement(`
+        INSERT INTO tracer.tenant_users
+          (user_id, tenant_id, email, full_name, role, status, password_hash, created_at, last_login_at, updated_at)
+        VALUES
+          (
+            ${sqlString(userId)},
+            ${sqlString(tenantId)},
+            ${sqlString(adminEmail)},
+            ${sqlString(tenantName)},
+            'owner',
+            'active',
+            ${sqlString(passwordHash)},
+            now64(3),
+            now64(3),
+            now64(3)
+          )
+      `)
+    }
 
     await insertStatement(`
       INSERT INTO tracer.sites
@@ -198,7 +226,7 @@ export async function POST(request: Request) {
       emailWarning = emailError instanceof Error ? emailError.message : "Could not prepare onboarding email."
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       tenant_id: tenantId,
       site_id: siteId,
       domain,
@@ -210,6 +238,13 @@ export async function POST(request: Request) {
       email_warning: emailWarning,
       note: "Raw keys are shown once. ClickHouse stores only SHA-256 hashes.",
     })
+    setSessionCookie(response, {
+      user_id: userId,
+      tenant_id: tenantId,
+      email: adminEmail,
+      role: session?.role || "owner",
+    })
+    return response
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error"
     return NextResponse.json({ error: message }, { status: 500 })

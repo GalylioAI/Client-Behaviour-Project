@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 
-import { clickhouseCommand, clickhouseInsertJson, clickhouseQuery, str } from "@/lib/clickhouse"
+import { clickhouseCommand, clickhouseInsertJson, clickhouseQuery, sqlString, str } from "@/lib/clickhouse"
 
 const APP_BASE_URL = (process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || "http://192.168.1.109:3100").replace(/\/$/, "")
 const WEBHOOK_URL = "https://tracker.yatootunisie.tn/webhook"
@@ -202,7 +202,7 @@ export async function prepareOnboardingEmail(input: CreateOnboardingEmailInput) 
   }
 }
 
-export async function loadOnboardingEmails(): Promise<PreparedOnboardingEmail[]> {
+export async function loadOnboardingEmails(tenantId?: string): Promise<PreparedOnboardingEmail[]> {
   await ensureEmailOutboxSchema()
 
   const rows = await clickhouseQuery(`
@@ -223,6 +223,7 @@ export async function loadOnboardingEmails(): Promise<PreparedOnboardingEmail[]>
       sent_at,
       updated_at
     FROM tracer.onboarding_email_outbox
+    ${tenantId ? `WHERE tenant_id = ${sqlString(tenantId)}` : ""}
     ORDER BY created_at DESC
     LIMIT 100
   `)
