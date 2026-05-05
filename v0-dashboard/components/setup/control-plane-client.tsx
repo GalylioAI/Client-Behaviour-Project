@@ -187,7 +187,7 @@ export function ControlPlaneClient({ data }: { data: ControlPlaneData }) {
             </div>
           </div>
           <Button asChild variant="outline" className="border-slate-200 bg-white text-slate-700">
-            <Link href="/">
+            <Link href="/app">
               <ExternalLink className="h-4 w-4" />
               Dashboard
             </Link>
@@ -295,7 +295,7 @@ export function ControlPlaneClient({ data }: { data: ControlPlaneData }) {
                     Browser events use the public key. Server-side purchase/order events can use the server secret. Never expose the secret in custom frontend JavaScript.
                   </div>
                   <Button asChild variant="outline" className="border-slate-200 bg-white text-slate-700">
-                    <Link href={`/?site_id=${encodeURIComponent(result.site_id)}`}>
+                    <Link href={`/app?site_id=${encodeURIComponent(result.site_id)}`}>
                       <ExternalLink className="h-4 w-4" />
                       Open Site Dashboard
                     </Link>
@@ -367,7 +367,7 @@ export function ControlPlaneClient({ data }: { data: ControlPlaneData }) {
                       </td>
                       <td className="py-3 pr-4">
                         <Button asChild size="sm" variant="outline" className="border-slate-200 bg-white text-slate-700">
-                          <Link href={`/?site_id=${encodeURIComponent(site.site_id)}`}>Open</Link>
+                          <Link href={`/app?site_id=${encodeURIComponent(site.site_id)}`}>Open</Link>
                         </Button>
                       </td>
                     </tr>

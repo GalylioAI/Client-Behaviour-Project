@@ -65,7 +65,7 @@ function PreviewMetric({
   )
 }
 
-export function LoginPage({ nextPath = "/" }: { nextPath?: string }) {
+export function LoginPage({ nextPath = "/app" }: { nextPath?: string }) {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
@@ -88,7 +88,7 @@ export function LoginPage({ nextPath = "/" }: { nextPath?: string }) {
         throw new Error(payload.error || "Could not log in.")
       }
 
-      window.location.href = nextPath || "/"
+      window.location.href = nextPath || "/app"
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not log in.")
       setIsSubmitting(false)

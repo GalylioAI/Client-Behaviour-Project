@@ -281,7 +281,7 @@ export function ConnectPage({ data }: { data: DebugData }) {
               </Link>
             </Button>
             <Button asChild className="bg-blue-600 hover:bg-blue-700">
-              <Link href={`/?site_id=${encodeURIComponent(data.selectedSiteId)}`}>
+              <Link href={`/app?site_id=${encodeURIComponent(data.selectedSiteId)}`}>
                 Dashboard
                 <ArrowRight className="h-4 w-4" />
               </Link>
@@ -439,7 +439,7 @@ export function ConnectPage({ data }: { data: DebugData }) {
               </Link>
             </Button>
             <Button asChild variant="outline" className="border-slate-200 bg-white text-slate-700">
-              <Link href={`/?site_id=${encodeURIComponent(data.selectedSiteId)}`}>
+              <Link href={`/app?site_id=${encodeURIComponent(data.selectedSiteId)}`}>
                 <Globe2 className="h-4 w-4" />
                 Open Dashboard
               </Link>

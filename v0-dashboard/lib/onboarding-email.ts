@@ -95,7 +95,7 @@ function escapeHtml(value: string) {
 function buildEmail(input: CreateOnboardingEmailInput) {
   const plugin = pluginSource(input.platform)
   const connectUrl = `${APP_BASE_URL}/connect?site_id=${encodeURIComponent(input.siteId)}`
-  const dashboardUrl = `${APP_BASE_URL}/?site_id=${encodeURIComponent(input.siteId)}`
+  const dashboardUrl = `${APP_BASE_URL}/app?site_id=${encodeURIComponent(input.siteId)}`
   const debugUrl = `${APP_BASE_URL}/debug?site_id=${encodeURIComponent(input.siteId)}`
   const subject = `Your BehaviourAI tracker access for ${input.domain || input.siteId}`
   const previewText = "Install your open-source tracker, paste your public key, then verify live events."

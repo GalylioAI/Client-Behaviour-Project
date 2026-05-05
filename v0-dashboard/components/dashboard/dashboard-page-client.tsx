@@ -69,7 +69,7 @@ import { cn } from "@/lib/utils"
 const chartColors = ["#1769E8", "#14B8A6", "#6366F1", "#F59E0B", "#EF4444", "#64748B"]
 
 const navigation = [
-  { label: "Dashboard", icon: LayoutDashboard, active: true, href: "/" },
+  { label: "Dashboard", icon: LayoutDashboard, active: true, href: "/app" },
   { label: "Live Events", icon: Activity },
   { label: "Funnels", icon: BarChart3 },
   { label: "Audience", icon: Users },

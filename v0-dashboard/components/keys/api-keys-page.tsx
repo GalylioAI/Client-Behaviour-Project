@@ -220,7 +220,7 @@ export function ApiKeysPage({ data }: { data: ApiKeyManagementData }) {
               </Link>
             </Button>
             <Button asChild className="bg-blue-600 hover:bg-blue-700">
-              <Link href={`/?site_id=${encodeURIComponent(data.selectedSiteId)}`}>
+              <Link href={`/app?site_id=${encodeURIComponent(data.selectedSiteId)}`}>
                 Dashboard
                 <ArrowRight className="h-4 w-4" />
               </Link>

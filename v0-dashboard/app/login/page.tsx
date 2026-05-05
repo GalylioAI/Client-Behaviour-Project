@@ -11,6 +11,6 @@ export default async function Login({ searchParams }: LoginPageProps) {
   const params = searchParams ? await searchParams : {}
   const rawNext = params.next
   const nextPath = Array.isArray(rawNext) ? rawNext[0] : rawNext
-  const safeNext = nextPath?.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/"
+  const safeNext = nextPath?.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/app"
   return <LoginPage nextPath={safeNext} />
 }

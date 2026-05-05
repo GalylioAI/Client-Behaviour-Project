@@ -309,7 +309,7 @@ export function DebugPage({ data }: { data: DebugData }) {
               </Link>
             </Button>
             <Button asChild variant="outline" className="border-slate-200 bg-white text-slate-700">
-              <Link href="/">
+              <Link href="/app">
                 <ExternalLink className="h-4 w-4" />
                 Dashboard
               </Link>
