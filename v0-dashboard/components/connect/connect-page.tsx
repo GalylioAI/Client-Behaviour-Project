@@ -263,6 +263,12 @@ export function ConnectPage({ data }: { data: DebugData }) {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline" className="border-slate-200 bg-white text-slate-700">
+              <Link href={`/downloads?site_id=${encodeURIComponent(data.selectedSiteId)}`}>
+                <Download className="h-4 w-4" />
+                Downloads
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="border-slate-200 bg-white text-slate-700">
               <Link href={`/debug?site_id=${encodeURIComponent(data.selectedSiteId)}`}>
                 <Activity className="h-4 w-4" />
                 Debug
@@ -432,9 +438,11 @@ export function ConnectPage({ data }: { data: DebugData }) {
                 Open Dashboard
               </Link>
             </Button>
-            <Button variant="outline" className="border-slate-200 bg-white text-slate-700">
-              <Download className="h-4 w-4" />
-              Plugin downloads soon
+            <Button asChild variant="outline" className="border-slate-200 bg-white text-slate-700">
+              <Link href={`/downloads?site_id=${encodeURIComponent(data.selectedSiteId)}`}>
+                <Download className="h-4 w-4" />
+                Plugin Downloads
+              </Link>
             </Button>
           </section>
         </div>
