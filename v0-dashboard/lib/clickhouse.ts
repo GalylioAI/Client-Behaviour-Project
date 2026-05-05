@@ -58,6 +58,23 @@ export async function clickhouseCommand(sql: string): Promise<string> {
   return response.text()
 }
 
+export async function clickhouseInsertJson(table: string, row: Record<string, unknown>): Promise<string> {
+  const { endpoint, headers } = getConnection()
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers,
+    body: `INSERT INTO ${table} FORMAT JSONEachRow\n${JSON.stringify(row)}`,
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    const detail = await response.text()
+    throw new Error(`ClickHouse insert failed: ${response.status} ${detail}`)
+  }
+
+  return response.text()
+}
+
 export function sqlString(value: string) {
   return `'${value.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`
 }

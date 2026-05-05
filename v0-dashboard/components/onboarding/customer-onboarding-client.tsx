@@ -10,6 +10,7 @@ import {
   KeyRound,
   Loader2,
   LockKeyhole,
+  Mail,
   PlugZap,
   Radio,
   ShieldCheck,
@@ -32,6 +33,16 @@ type ProvisionedSite = {
   public_write_key: string
   server_secret_key: string
   note: string
+  email_package?: {
+    email_id: string
+    to_email: string
+    subject: string
+    status: string
+    provider: string
+    connect_url: string
+    dashboard_url: string
+  } | null
+  email_warning?: string
 }
 
 const platforms = [
@@ -285,6 +296,22 @@ export function CustomerOnboardingClient() {
                     Public key goes in plugin settings. Server secret stays private for server-side order events.
                   </div>
 
+                  <div className="rounded-md border border-emerald-100 bg-emerald-50 p-3">
+                    <div className="flex items-start gap-3">
+                      <Mail className="mt-0.5 h-4 w-4 text-emerald-700" />
+                      <div>
+                        <div className="text-sm font-semibold text-emerald-950">
+                          {site.email_package ? "Onboarding email prepared" : "Email package not prepared"}
+                        </div>
+                        <div className="mt-1 text-xs leading-5 text-emerald-800">
+                          {site.email_package
+                            ? `Prepared for ${site.email_package.to_email}. Preview it in the internal email outbox.`
+                            : site.email_warning || "The workspace was created, but no email package was stored."}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="flex flex-wrap gap-2">
                     <Button asChild className="bg-blue-600 hover:bg-blue-700">
                       <Link href={`/connect?site_id=${encodeURIComponent(site.site_id)}`}>
@@ -296,6 +323,11 @@ export function CustomerOnboardingClient() {
                       <Link href={`/?site_id=${encodeURIComponent(site.site_id)}`}>
                         Open Dashboard
                         <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" className="border-slate-200 bg-white text-slate-700">
+                      <Link href="/emails">
+                        Email Outbox
                       </Link>
                     </Button>
                     <Button type="button" variant="outline" className="border-slate-200 bg-white text-slate-700" onClick={() => window.location.reload()}>

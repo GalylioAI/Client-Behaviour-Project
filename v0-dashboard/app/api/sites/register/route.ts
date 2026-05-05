@@ -4,6 +4,7 @@ import { NextResponse } from "next/server"
 
 import { clickhouseCommand, clickhouseQuery, sqlArray, sqlString } from "@/lib/clickhouse"
 import { ensureControlPlaneSchema } from "@/lib/control-plane"
+import { prepareOnboardingEmail } from "@/lib/onboarding-email"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -181,6 +182,22 @@ export async function POST(request: Request) {
         )
     `)
 
+    let emailPackage = null
+    let emailWarning = ""
+    try {
+      emailPackage = await prepareOnboardingEmail({
+        tenantId,
+        siteId,
+        tenantName,
+        adminEmail,
+        domain,
+        platform,
+        publicWriteKey: publicKey,
+      })
+    } catch (emailError) {
+      emailWarning = emailError instanceof Error ? emailError.message : "Could not prepare onboarding email."
+    }
+
     return NextResponse.json({
       tenant_id: tenantId,
       site_id: siteId,
@@ -189,6 +206,8 @@ export async function POST(request: Request) {
       allowed_origins: allowedOrigins,
       public_write_key: publicKey,
       server_secret_key: serverKey,
+      email_package: emailPackage,
+      email_warning: emailWarning,
       note: "Raw keys are shown once. ClickHouse stores only SHA-256 hashes.",
     })
   } catch (error) {
