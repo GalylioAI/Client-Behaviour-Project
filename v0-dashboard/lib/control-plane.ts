@@ -100,7 +100,7 @@ export async function loadControlPlane(): Promise<ControlPlaneData> {
         countIf(key_type = 'public_write' AND status = 'active' AND revoked_at IS NULL) AS public_key_count,
         countIf(key_type = 'server_secret' AND status = 'active' AND revoked_at IS NULL) AS server_key_count,
         groupArrayIf(key_prefix, status = 'active' AND revoked_at IS NULL) AS key_prefixes
-      FROM tracer.site_keys
+      FROM tracer.site_keys FINAL
       GROUP BY site_id
     `),
   ])

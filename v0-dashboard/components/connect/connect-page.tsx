@@ -374,6 +374,12 @@ export function ConnectPage({ data }: { data: DebugData }) {
                 <div className="rounded-md border border-amber-100 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
                   Raw keys are not recoverable from the database because only hashes are stored. If a customer loses the key, rotate/generate a new key later.
                 </div>
+                <Button asChild variant="outline" className="w-full border-slate-200 bg-white text-slate-700">
+                  <Link href={`/keys?site_id=${encodeURIComponent(data.selectedSiteId)}`}>
+                    <KeyRound className="h-4 w-4" />
+                    Manage API Keys
+                  </Link>
+                </Button>
                 <div className="rounded-md border border-blue-100 bg-blue-50 p-3 text-sm leading-6 text-blue-900">
                   Plugin settings location: {plugin.settingsPath}.
                 </div>

@@ -68,15 +68,15 @@ import { cn } from "@/lib/utils"
 const chartColors = ["#1769E8", "#14B8A6", "#6366F1", "#F59E0B", "#EF4444", "#64748B"]
 
 const navigation = [
-  { label: "Dashboard", icon: LayoutDashboard, active: true },
+  { label: "Dashboard", icon: LayoutDashboard, active: true, href: "/" },
   { label: "Live Events", icon: Activity },
   { label: "Funnels", icon: BarChart3 },
   { label: "Audience", icon: Users },
   { label: "Products", icon: PackageSearch },
   { label: "AI Insights", icon: Brain },
   { label: "Reports", icon: LineChartIcon },
-  { label: "Sites", icon: Globe2 },
-  { label: "API Keys", icon: KeyRound },
+  { label: "Sites", icon: Globe2, href: "/setup" },
+  { label: "API Keys", icon: KeyRound, href: "/keys" },
   { label: "Pipelines", icon: Workflow },
   { label: "Settings", icon: Settings },
 ]
@@ -183,7 +183,9 @@ function Surface({
   )
 }
 
-function Sidebar({ siteDomain }: { siteDomain: string }) {
+function Sidebar({ siteDomain, siteId }: { siteDomain: string; siteId: string }) {
+  const siteQuery = siteId ? `?site_id=${encodeURIComponent(siteId)}` : ""
+
   return (
     <aside className="hidden h-screen border-r border-slate-200 bg-white lg:sticky lg:top-0 lg:flex lg:flex-col">
       <div className="flex h-16 items-center gap-3 border-b border-slate-100 px-5">
@@ -207,20 +209,28 @@ function Sidebar({ siteDomain }: { siteDomain: string }) {
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-3">
-        {navigation.map((item) => (
-          <button
-            key={item.label}
-            className={cn(
-              "flex h-9 w-full items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors",
-              item.active
-                ? "bg-blue-50 text-blue-700"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
-            )}
-          >
-            <item.icon className="h-4 w-4" />
-            {item.label}
-          </button>
-        ))}
+        {navigation.map((item) => {
+          const content = (
+            <>
+              <item.icon className="h-4 w-4" />
+              {item.label}
+            </>
+          )
+          const className = cn(
+            "flex h-9 w-full items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors",
+            item.active ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+          )
+
+          return item.href ? (
+            <Link key={item.label} href={`${item.href}${siteQuery}`} className={className}>
+              {content}
+            </Link>
+          ) : (
+            <button key={item.label} className={className}>
+              {content}
+            </button>
+          )
+        })}
       </nav>
 
       <div className="border-t border-slate-100 p-4">
@@ -254,6 +264,12 @@ function Topbar({ siteLabel, siteId, latestEvent }: { siteLabel: string; siteId:
       </div>
 
       <div className="flex items-center gap-2">
+        <Button asChild variant="outline" size="sm" className="hidden border-slate-200 bg-white text-slate-700 md:inline-flex">
+          <Link href={`/keys?site_id=${encodeURIComponent(siteId)}`}>
+            <KeyRound className="h-4 w-4" />
+            API Keys
+          </Link>
+        </Button>
         <Button asChild variant="outline" size="sm" className="hidden border-slate-200 bg-white text-slate-700 md:inline-flex">
           <Link href="/setup">
             <KeyRound className="h-4 w-4" />
@@ -646,7 +662,17 @@ function RightPanel({ insights }: { insights: BehaviorInsights }) {
             </div>
           </Surface>
 
-          <Surface title="API Key Status" className="shadow-none">
+          <Surface
+            title="API Key Status"
+            className="shadow-none"
+            action={
+              <Button asChild variant="outline" size="sm" className="border-slate-200 bg-white text-slate-700">
+                <Link href={`/keys?site_id=${encodeURIComponent(site.site_id || "tdiscount")}`}>
+                  Manage
+                </Link>
+              </Button>
+            }
+          >
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <StatusDot status={publicKeys.length ? "healthy" : "warning"} label="Public write keys" />
@@ -806,7 +832,7 @@ export function DashboardPageClient({ insights }: { insights: BehaviorInsights }
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <div className="grid min-h-screen lg:grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)_360px]">
-        <Sidebar siteDomain={site.domain} />
+        <Sidebar siteDomain={site.domain} siteId={site.site_id || "tdiscount"} />
 
         <main className="min-w-0">
           <Topbar siteLabel={site.domain || site.site_id || "tdiscount"} siteId={site.site_id || "tdiscount"} latestEvent={latestEvent} />

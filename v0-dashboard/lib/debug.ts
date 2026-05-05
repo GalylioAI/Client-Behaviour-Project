@@ -186,7 +186,7 @@ export async function loadDebugData(siteId?: string): Promise<DebugData> {
         site_id,
         countIf(key_type = 'public_write' AND status = 'active' AND revoked_at IS NULL) AS public_key_count,
         countIf(key_type = 'server_secret' AND status = 'active' AND revoked_at IS NULL) AS server_key_count
-      FROM tracer.site_keys
+      FROM tracer.site_keys FINAL
       GROUP BY site_id
     `),
     safeQuery(`
