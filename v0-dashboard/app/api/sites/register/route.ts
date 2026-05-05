@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto"
 
 import { NextResponse } from "next/server"
 
-import { clickhouseCommand, sqlArray, sqlString } from "@/lib/clickhouse"
+import { clickhouseCommand, clickhouseQuery, sqlArray, sqlString } from "@/lib/clickhouse"
 import { ensureControlPlaneSchema } from "@/lib/control-plane"
 
 export const dynamic = "force-dynamic"
@@ -101,6 +101,18 @@ export async function POST(request: Request) {
     }
 
     await ensureControlPlaneSchema()
+
+    const existingSiteRows = await clickhouseQuery<{ rows: number }>(`
+      SELECT count() AS rows
+      FROM tracer.sites
+      WHERE site_id = ${sqlString(siteId)}
+    `)
+    if (Number(existingSiteRows[0]?.rows || 0) > 0) {
+      return NextResponse.json(
+        { error: `Site ID "${siteId}" already exists. Use another site ID or open the existing site from the control plane.` },
+        { status: 409 }
+      )
+    }
 
     const now = Date.now().toString(36)
     const publicKey = makeKey("pk_live_")
