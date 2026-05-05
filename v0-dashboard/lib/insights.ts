@@ -227,8 +227,8 @@ function latest<T>(rows: T[], fallback: T): T {
   return rows[0] || fallback
 }
 
-function getSiteId() {
-  return process.env.DASHBOARD_SITE_ID || "tdiscount"
+function getSiteId(siteId?: string) {
+  return siteId || process.env.DASHBOARD_SITE_ID || "tdiscount"
 }
 
 function getLookbackDays() {
@@ -413,8 +413,8 @@ function referrerChannel(referrerUrl: string) {
   return "Referral"
 }
 
-export async function loadInsights(): Promise<BehaviorInsights> {
-  const siteId = getSiteId()
+export async function loadInsights(siteIdOverride?: string): Promise<BehaviorInsights> {
+  const siteId = getSiteId(siteIdOverride)
   const days = getLookbackDays()
   const quotedSite = sqlString(siteId)
   const dateFilter = `metric_date >= today() - ${days}`

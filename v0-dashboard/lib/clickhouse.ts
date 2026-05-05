@@ -41,8 +41,29 @@ export async function clickhouseQuery<T extends ClickHouseRow = ClickHouseRow>(s
     .map((line) => JSON.parse(line) as T)
 }
 
+export async function clickhouseCommand(sql: string): Promise<string> {
+  const { endpoint, headers } = getConnection()
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers,
+    body: sql.trim().replace(/;$/, ""),
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    const detail = await response.text()
+    throw new Error(`ClickHouse command failed: ${response.status} ${detail}`)
+  }
+
+  return response.text()
+}
+
 export function sqlString(value: string) {
   return `'${value.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`
+}
+
+export function sqlArray(values: string[]) {
+  return `[${values.map((value) => sqlString(value)).join(", ")}]`
 }
 
 export function num(value: unknown, fallback = 0) {

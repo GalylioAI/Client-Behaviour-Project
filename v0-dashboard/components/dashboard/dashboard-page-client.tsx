@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState, type ReactNode } from "react"
+import Link from "next/link"
 import {
   Activity,
   AlertTriangle,
@@ -253,6 +254,12 @@ function Topbar({ siteLabel, latestEvent }: { siteLabel: string; latestEvent: st
       </div>
 
       <div className="flex items-center gap-2">
+        <Button asChild variant="outline" size="sm" className="hidden border-slate-200 bg-white text-slate-700 md:inline-flex">
+          <Link href="/setup">
+            <KeyRound className="h-4 w-4" />
+            Setup
+          </Link>
+        </Button>
         <Button variant="outline" size="sm" className="hidden border-slate-200 bg-white text-slate-700 md:inline-flex">
           <CalendarDays className="h-4 w-4" />
           Last 7 days
