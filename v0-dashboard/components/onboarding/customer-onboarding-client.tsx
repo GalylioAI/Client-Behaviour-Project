@@ -287,6 +287,12 @@ export function CustomerOnboardingClient() {
 
                   <div className="flex flex-wrap gap-2">
                     <Button asChild className="bg-blue-600 hover:bg-blue-700">
+                      <Link href={`/connect?site_id=${encodeURIComponent(site.site_id)}`}>
+                        Connect Plugin
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" className="border-slate-200 bg-white text-slate-700">
                       <Link href={`/?site_id=${encodeURIComponent(site.site_id)}`}>
                         Open Dashboard
                         <ArrowRight className="h-4 w-4" />
