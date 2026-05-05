@@ -233,7 +233,7 @@ function Sidebar({ siteDomain }: { siteDomain: string }) {
   )
 }
 
-function Topbar({ siteLabel, latestEvent }: { siteLabel: string; latestEvent: string | null }) {
+function Topbar({ siteLabel, siteId, latestEvent }: { siteLabel: string; siteId: string; latestEvent: string | null }) {
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-4 border-b border-slate-200 bg-white/90 px-4 backdrop-blur md:px-6">
       <div className="flex min-w-0 items-center gap-3">
@@ -258,6 +258,12 @@ function Topbar({ siteLabel, latestEvent }: { siteLabel: string; latestEvent: st
           <Link href="/setup">
             <KeyRound className="h-4 w-4" />
             Setup
+          </Link>
+        </Button>
+        <Button asChild variant="outline" size="sm" className="hidden border-slate-200 bg-white text-slate-700 md:inline-flex">
+          <Link href={`/debug?site_id=${encodeURIComponent(siteId)}`}>
+            <Activity className="h-4 w-4" />
+            Debug
           </Link>
         </Button>
         <Button variant="outline" size="sm" className="hidden border-slate-200 bg-white text-slate-700 md:inline-flex">
@@ -803,7 +809,7 @@ export function DashboardPageClient({ insights }: { insights: BehaviorInsights }
         <Sidebar siteDomain={site.domain} />
 
         <main className="min-w-0">
-          <Topbar siteLabel={site.domain || site.site_id || "tdiscount"} latestEvent={latestEvent} />
+          <Topbar siteLabel={site.domain || site.site_id || "tdiscount"} siteId={site.site_id || "tdiscount"} latestEvent={latestEvent} />
 
           <div className="mx-auto max-w-[1440px] space-y-5 px-4 py-5 md:px-6">
             <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">

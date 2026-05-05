@@ -44,6 +44,7 @@ CLICKHOUSE_HTTP_URL = os.getenv(
 SITE_REGISTRY_ENABLED = os.getenv("SITE_REGISTRY_ENABLED", "false").lower() in ("1", "true", "yes", "on")
 SITE_REGISTRY_COMPAT_ALLOW_MISSING_KEY = os.getenv("SITE_REGISTRY_COMPAT_ALLOW_MISSING_KEY", "false").lower() in ("1", "true", "yes", "on")
 SITE_REGISTRY_CACHE_TTL_SECONDS = int(os.getenv("SITE_REGISTRY_CACHE_TTL_SECONDS", "60"))
+INGEST_AUDIT_ENABLED = os.getenv("INGEST_AUDIT_ENABLED", "true").lower() in ("1", "true", "yes", "on")
 
 # Worker identity — each uvicorn worker process gets a unique ID based on PID
 WORKER_ID = f"worker_{os.getpid()}"
@@ -421,6 +422,83 @@ async def clickhouse_json(sql: str) -> list[dict]:
         response.raise_for_status()
     return [json.loads(line) for line in response.text.splitlines() if line.strip()]
 
+async def clickhouse_insert_json(table: str, row: dict) -> None:
+    if not INGEST_AUDIT_ENABLED:
+        return
+    async with httpx.AsyncClient(timeout=2) as client:
+        response = await client.post(
+            CLICKHOUSE_HTTP_URL,
+            content=f"INSERT INTO {table} FORMAT JSONEachRow\n{json.dumps(row, default=str)}",
+            headers={"Content-Type": "text/plain; charset=utf-8"},
+        )
+        response.raise_for_status()
+
+def clickhouse_datetime(value: str) -> str:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return parsed.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    except Exception:
+        return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+
+def sample_event(events: list) -> dict:
+    if events and isinstance(events[0], dict):
+        return events[0]
+    return {}
+
+def safe_preview(value: str, limit: int = 500) -> str:
+    return value[:limit] if value else ""
+
+async def audit_ingest_request(
+    request: Request,
+    envelope: dict,
+    events: list,
+    *,
+    received_at: str,
+    client_ip: str,
+    status: str,
+    http_status: int,
+    reason: str = "",
+    is_unload: bool = False,
+    sent: int = 0,
+    failed: int = 0,
+) -> None:
+    if not INGEST_AUDIT_ENABLED:
+        return
+
+    try:
+        event = sample_event(events)
+        page = as_dict(event.get("page"))
+        props = as_dict(event.get("properties"))
+        source = extract_source(envelope, events) or str(event.get("source") or envelope.get("source") or "")
+        write_key = extract_write_key(request, envelope, events)
+        row = {
+            "audit_id": str(uuid.uuid4()),
+            "received_at": clickhouse_datetime(received_at),
+            "worker": WORKER_ID,
+            "status": status,
+            "http_status": int(http_status),
+            "site_id": extract_site_id(envelope, events),
+            "platform": extract_platform(envelope, events),
+            "source": source,
+            "client_ip": client_ip,
+            "origin": safe_preview(request.headers.get("origin", "")),
+            "referer": safe_preview(request.headers.get("referer", "")),
+            "user_agent": safe_preview(request.headers.get("user-agent", "")),
+            "event_count": len(events),
+            "sent_count": int(sent),
+            "failed_count": int(failed),
+            "is_unload": 1 if is_unload else 0,
+            "reason": safe_preview(str(reason), 500),
+            "key_present": 1 if write_key else 0,
+            "key_prefix": write_key[:16] if write_key else "",
+            "sample_event_name": safe_preview(str(event.get("event_name") or event.get("event") or event.get("name") or "")),
+            "sample_event_type": safe_preview(str(event.get("event_type") or event.get("event_category") or event.get("category") or "")),
+            "sample_page_url": safe_preview(str(page.get("url") or event.get("page_url") or event.get("url") or props.get("url") or ""), 500),
+        }
+        await clickhouse_insert_json("tracer.event_ingest_audit", row)
+    except Exception as exc:
+        log.warning("Ingest audit write failed | status=%s reason=%s error=%s", status, reason, exc)
+
 async def load_site_record(site_id: str) -> dict | None:
     now = time.time()
     cached = _site_registry_cache.get(site_id)
@@ -540,6 +618,7 @@ async def health():
         "cors_allow_origins": CORS_ALLOW_ORIGINS,
         "site_registry_enabled": SITE_REGISTRY_ENABLED,
         "site_registry_compat_allow_missing_key": SITE_REGISTRY_COMPAT_ALLOW_MISSING_KEY,
+        "ingest_audit_enabled": INGEST_AUDIT_ENABLED,
     }
 
 @app.get("/metrics", response_class=PlainTextResponse)
@@ -559,10 +638,30 @@ async def webhook(request: Request):
         data = await request.json()
     except Exception:
         log.warning("Invalid JSON | ip=%s", client_ip)
+        await audit_ingest_request(
+            request,
+            {},
+            [],
+            received_at=received_at,
+            client_ip=client_ip,
+            status="rejected",
+            http_status=400,
+            reason="Invalid JSON body",
+        )
         raise HTTPException(status_code=400, detail="Invalid JSON body")
 
     if not isinstance(data, dict):
         log.warning("Invalid payload | ip=%s type=%s", client_ip, type(data).__name__)
+        await audit_ingest_request(
+            request,
+            {},
+            [],
+            received_at=received_at,
+            client_ip=client_ip,
+            status="rejected",
+            http_status=400,
+            reason="JSON body must be an object",
+        )
         raise HTTPException(status_code=400, detail="JSON body must be an object")
 
     envelope = data if isinstance(data, dict) else {}
@@ -584,7 +683,21 @@ async def webhook(request: Request):
         is_unload = bool(data.get("is_unload", False))
         log.info("Single | worker=%s ip=%s type=%s", WORKER_ID, client_ip, data.get("event_type") or data.get("event", "?"))
 
-    await validate_site_access(request, envelope, events)
+    try:
+        await validate_site_access(request, envelope, events)
+    except HTTPException as exc:
+        await audit_ingest_request(
+            request,
+            envelope,
+            events,
+            received_at=received_at,
+            client_ip=client_ip,
+            status="rejected",
+            http_status=exc.status_code,
+            reason=str(exc.detail),
+            is_unload=is_unload,
+        )
+        raise
 
     inc("batches_received_total")
     inc("events_received_total", len(events))
@@ -616,6 +729,19 @@ async def webhook(request: Request):
 
     await asyncio.gather(*[process(e) for e in events])
     log.info("Done | worker=%s sent=%d failed=%d ip=%s", WORKER_ID, sent, failed, client_ip)
+    await audit_ingest_request(
+        request,
+        envelope,
+        events,
+        received_at=received_at,
+        client_ip=client_ip,
+        status="accepted" if sent else "dead_letter",
+        http_status=200,
+        reason="" if not failed else f"{failed} event(s) failed validation or Kafka send",
+        is_unload=is_unload,
+        sent=sent,
+        failed=failed,
+    )
     return {"status": "received", "sent": sent, "failed": failed}
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
