@@ -99,6 +99,26 @@ export interface BehaviorInsights {
       revenue: number
       share_pct: number
     }>
+    campaign_sources: Array<{
+      source: string
+      medium: string
+      campaign: string
+      sessions: number
+      visitors: number
+      purchases: number
+      revenue: number
+      share_pct: number
+    }>
+    buyer_campaign_sources: Array<{
+      source: string
+      medium: string
+      campaign: string
+      sessions: number
+      visitors: number
+      purchases: number
+      revenue: number
+      share_pct: number
+    }>
     channel_mix: Array<{
       channel: string
       sessions: number
@@ -325,6 +345,8 @@ function emptyInsights(siteId: string): BehaviorInsights {
     acquisition: {
       top_referrers: [],
       buyer_referrers: [],
+      campaign_sources: [],
+      buyer_campaign_sources: [],
       channel_mix: [],
     },
     merchandising: { top_page_types: [], top_search_terms: [], top_products: [], top_paths: [] },
@@ -465,6 +487,8 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
     deviceRows,
     referrerRows,
     buyerReferrerRows,
+    campaignRows,
+    buyerCampaignRows,
     trendRows,
     salesTrendRows,
     eventRows,
@@ -586,6 +610,41 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
         AND purchase_count > 0
       GROUP BY referrer_url
       ORDER BY purchases DESC, revenue DESC
+      LIMIT 50
+    `),
+    clickhouseQuery(`
+      SELECT
+        extractURLParameter(first_page_url, 'utm_source') AS source,
+        extractURLParameter(first_page_url, 'utm_medium') AS medium,
+        extractURLParameter(first_page_url, 'utm_campaign') AS campaign,
+        count() AS sessions,
+        uniqExact(visitor_id) AS visitors,
+        sum(purchase_count) AS purchases,
+        sum(revenue) AS revenue
+      FROM tracer.session_features FINAL
+      WHERE site_id = ${quotedSite}
+        AND ${sessionFilter}
+        AND extractURLParameter(first_page_url, 'utm_source') != ''
+      GROUP BY source, medium, campaign
+      ORDER BY sessions DESC, purchases DESC, revenue DESC
+      LIMIT 50
+    `),
+    clickhouseQuery(`
+      SELECT
+        extractURLParameter(first_page_url, 'utm_source') AS source,
+        extractURLParameter(first_page_url, 'utm_medium') AS medium,
+        extractURLParameter(first_page_url, 'utm_campaign') AS campaign,
+        count() AS sessions,
+        uniqExact(visitor_id) AS visitors,
+        sum(purchase_count) AS purchases,
+        sum(revenue) AS revenue
+      FROM tracer.session_features FINAL
+      WHERE site_id = ${quotedSite}
+        AND ${sessionFilter}
+        AND purchase_count > 0
+        AND extractURLParameter(first_page_url, 'utm_source') != ''
+      GROUP BY source, medium, campaign
+      ORDER BY purchases DESC, revenue DESC, sessions DESC
       LIMIT 50
     `),
     clickhouseQuery(`
@@ -848,8 +907,9 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
   const deviceTotal = deviceRows.reduce((sum, row) => sum + num(row.sessions), 0)
   const referrerTotal = referrerRows.reduce((sum, row) => sum + num(row.sessions), 0)
   const buyerReferrerTotal = buyerReferrerRows.reduce((sum, row) => sum + num(row.sessions), 0)
+  const campaignTotal = campaignRows.reduce((sum, row) => sum + num(row.sessions), 0)
+  const buyerCampaignTotal = buyerCampaignRows.reduce((sum, row) => sum + num(row.sessions), 0)
   const topReferrers = referrerRows
-    .filter((row) => str(row.referrer_url).trim() !== "")
     .slice(0, 10)
     .map((row) => {
       const referrerUrl = str(row.referrer_url)
@@ -879,6 +939,26 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
         share_pct: safePct(num(row.sessions), buyerReferrerTotal || conversion.purchase_sessions),
       }
     })
+  const campaignSources = campaignRows.slice(0, 10).map((row) => ({
+    source: str(row.source, "unknown"),
+    medium: str(row.medium, ""),
+    campaign: str(row.campaign, ""),
+    sessions: num(row.sessions),
+    visitors: num(row.visitors),
+    purchases: num(row.purchases),
+    revenue: num(row.revenue),
+    share_pct: safePct(num(row.sessions), campaignTotal || sessions),
+  }))
+  const buyerCampaignSources = buyerCampaignRows.slice(0, 10).map((row) => ({
+    source: str(row.source, "unknown"),
+    medium: str(row.medium, ""),
+    campaign: str(row.campaign, ""),
+    sessions: num(row.sessions),
+    visitors: num(row.visitors),
+    purchases: num(row.purchases),
+    revenue: num(row.revenue),
+    share_pct: safePct(num(row.sessions), buyerCampaignTotal || conversion.purchase_sessions),
+  }))
   const channels = new Map<string, { sessions: number; purchases: number; revenue: number }>()
   for (const row of referrerRows) {
     const channel = referrerChannel(str(row.referrer_url))
@@ -982,6 +1062,8 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
     acquisition: {
       top_referrers: topReferrers,
       buyer_referrers: buyerReferrers,
+      campaign_sources: campaignSources,
+      buyer_campaign_sources: buyerCampaignSources,
       channel_mix: channelMix,
     },
     merchandising: {

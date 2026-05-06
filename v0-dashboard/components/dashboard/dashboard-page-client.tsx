@@ -1121,7 +1121,8 @@ function LiveEventStream({ insights }: { insights: BehaviorInsights }) {
 }
 
 function TrafficCard({ insights }: { insights: BehaviorInsights }) {
-  const [mode, setMode] = useState<"all" | "buyers">("all")
+  const [sourceMode, setSourceMode] = useState<"referrers" | "campaigns">("referrers")
+  const [audienceMode, setAudienceMode] = useState<"all" | "buyers">("all")
   const referrers = buildTopReferrers(insights).slice(0, 5)
   const buyerReferrers = insights.acquisition.buyer_referrers.slice(0, 5).map((referrer) => ({
     id: referrer.referrer_url || "direct",
@@ -1129,46 +1130,86 @@ function TrafficCard({ insights }: { insights: BehaviorInsights }) {
     value: referrer.purchases,
     secondaryValue: `${referrer.channel} · ${fmtInt(referrer.sessions)} buyer session${referrer.sessions === 1 ? "" : "s"} · ${fmtMoney(referrer.revenue)}`,
   }))
-  const buyerChannels = Array.from(
-    insights.acquisition.buyer_referrers.reduce((map, referrer) => {
-      const current = map.get(referrer.channel) || { channel: referrer.channel, sessions: 0, purchases: 0, revenue: 0 }
-      current.sessions += referrer.sessions
-      current.purchases += referrer.purchases
-      current.revenue += referrer.revenue
-      map.set(referrer.channel, current)
+  const campaignRows = insights.acquisition.campaign_sources.slice(0, 5).map((campaign) => ({
+    id: `${campaign.source}-${campaign.medium}-${campaign.campaign || "campaign"}`,
+    label: campaign.source,
+    value: campaign.sessions,
+    secondaryValue: `${campaign.medium || "campaign"}${campaign.campaign ? ` · ${campaign.campaign}` : ""} · ${fmtPct(campaign.share_pct)} of campaign sessions`,
+  }))
+  const buyerCampaignRows = insights.acquisition.buyer_campaign_sources.slice(0, 5).map((campaign) => ({
+    id: `${campaign.source}-${campaign.medium}-${campaign.campaign || "buyer-campaign"}`,
+    label: campaign.source,
+    value: campaign.purchases,
+    secondaryValue: `${campaign.medium || "campaign"}${campaign.campaign ? ` · ${campaign.campaign}` : ""} · ${fmtInt(campaign.sessions)} buyer session${campaign.sessions === 1 ? "" : "s"} · ${fmtMoney(campaign.revenue)}`,
+  }))
+  const rows = sourceMode === "campaigns"
+    ? audienceMode === "buyers" ? buyerCampaignRows : campaignRows
+    : audienceMode === "buyers" ? buyerReferrers : referrers
+  const chartRows = Array.from(
+    rows.reduce((map, row) => {
+      const current = map.get(row.label) || { label: row.label, sessions: 0, purchases: 0 }
+      if (audienceMode === "buyers") {
+        current.purchases += row.value
+      } else {
+        current.sessions += row.value
+      }
+      map.set(row.label, current)
       return map
-    }, new Map<string, { channel: string; sessions: number; purchases: number; revenue: number }>())
+    }, new Map<string, { label: string; sessions: number; purchases: number }>())
   )
     .map(([, row]) => row)
-    .sort((a, b) => b.purchases - a.purchases)
+    .sort((a, b) => (audienceMode === "buyers" ? b.purchases - a.purchases : b.sessions - a.sessions))
     .slice(0, 5)
-  const channels = mode === "buyers" ? buyerChannels : insights.acquisition.channel_mix.slice(0, 5)
-  const rows = mode === "buyers" ? buyerReferrers : referrers
-  const chartMetric = mode === "buyers" ? "purchases" : "sessions"
+  const chartMetric = audienceMode === "buyers" ? "purchases" : "sessions"
+  const modeLabel = sourceMode === "campaigns" ? "campaign source" : "referrer"
+  const emptyLabel = sourceMode === "campaigns"
+    ? audienceMode === "buyers" ? "No buyer campaign sources captured yet." : "No campaign sources captured yet."
+    : audienceMode === "buyers" ? "No buyer referral paths captured yet." : "No referral data captured yet."
 
   return (
     <Surface
       title="Traffic And Referrals"
-      description={mode === "buyers" ? "Referrers used by sessions that completed a purchase." : "Channels and referrers captured from session referrer data."}
+      description={sourceMode === "campaigns" ? "Campaign sources captured from first landing page UTM parameters." : "Browser referrers captured from session referrer data."}
       action={
-        <div className="flex rounded-md border border-slate-200 bg-slate-50 p-1">
-          {[
-            { id: "all" as const, label: "All traffic", icon: Users },
-            { id: "buyers" as const, label: "Buyer paths", icon: CircleDollarSign },
-          ].map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setMode(item.id)}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium transition",
-                mode === item.id ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:text-slate-800"
-              )}
-            >
-              <item.icon className="h-3.5 w-3.5" />
-              {item.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap gap-2">
+          <div className="flex rounded-md border border-slate-200 bg-slate-50 p-1">
+            {[
+              { id: "referrers" as const, label: "Referrers", icon: Globe2 },
+              { id: "campaigns" as const, label: "Campaigns", icon: Send },
+            ].map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setSourceMode(item.id)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium transition",
+                  sourceMode === item.id ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:text-slate-800"
+                )}
+              >
+                <item.icon className="h-3.5 w-3.5" />
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex rounded-md border border-slate-200 bg-slate-50 p-1">
+            {[
+              { id: "all" as const, label: "All sessions", icon: Users },
+              { id: "buyers" as const, label: "Buyers", icon: CircleDollarSign },
+            ].map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setAudienceMode(item.id)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium transition",
+                  audienceMode === item.id ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:text-slate-800"
+                )}
+              >
+                <item.icon className="h-3.5 w-3.5" />
+                {item.label}
+              </button>
+            ))}
+          </div>
         </div>
       }
     >
@@ -1176,9 +1217,9 @@ function TrafficCard({ insights }: { insights: BehaviorInsights }) {
         <div className="h-48">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie data={channels} dataKey={chartMetric} nameKey="channel" innerRadius={52} outerRadius={78} paddingAngle={3}>
-                {channels.map((entry, index) => (
-                  <Cell key={entry.channel} fill={chartColors[index % chartColors.length]} />
+              <Pie data={chartRows} dataKey={chartMetric} nameKey="label" innerRadius={52} outerRadius={78} paddingAngle={3}>
+                {chartRows.map((entry, index) => (
+                  <Cell key={entry.label} fill={chartColors[index % chartColors.length]} />
                 ))}
               </Pie>
               <Tooltip />
@@ -1194,11 +1235,12 @@ function TrafficCard({ insights }: { insights: BehaviorInsights }) {
               </div>
               <div className="text-right text-sm font-semibold tabular-nums text-slate-950">
                 {fmtInt(row.value)}
-                <div className="text-[11px] font-medium text-slate-400">{mode === "buyers" ? "buys" : "sessions"}</div>
+                <div className="text-[11px] font-medium text-slate-400">{audienceMode === "buyers" ? "buys" : "sessions"}</div>
               </div>
             </div>
           ))}
-          {!rows.length ? <p className="text-sm text-slate-500">{mode === "buyers" ? "No buyer referral paths captured yet." : "No referral data captured yet."}</p> : null}
+          {!rows.length ? <p className="text-sm text-slate-500">{emptyLabel}</p> : null}
+          {rows.length ? <p className="text-xs leading-5 text-slate-500">Showing top {modeLabel}s for {audienceMode === "buyers" ? "sessions with purchases" : "all sessions"}.</p> : null}
         </div>
       </div>
     </Surface>
