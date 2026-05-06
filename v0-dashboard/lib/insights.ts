@@ -44,6 +44,11 @@ export interface BehaviorInsights {
     sales: {
       revenue_tnd: number
       average_order_value_tnd: number | null
+      cancelled_orders: number
+      refunded_orders: number
+      failed_orders: number
+      cancelled_revenue_tnd: number
+      net_revenue_tnd: number
     }
   }
   commercial_funnel: {
@@ -338,6 +343,11 @@ function emptyInsights(siteId: string): BehaviorInsights {
       sales: {
         revenue_tnd: 0,
         average_order_value_tnd: null,
+        cancelled_orders: 0,
+        refunded_orders: 0,
+        failed_orders: 0,
+        cancelled_revenue_tnd: 0,
+        net_revenue_tnd: 0,
       },
     },
     commercial_funnel: {
@@ -643,6 +653,7 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
     campaignRows,
     buyerCampaignRows,
     channelRows,
+    orderLifecycleRows,
     trendRows,
     salesTrendRows,
     eventRows,
@@ -836,6 +847,19 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
         has_tiktok_click,
         has_microsoft_click
       ORDER BY sessions DESC
+    `),
+    clickhouseQuery(`
+      SELECT
+        countIf(event_name = 'order_cancelled') AS cancelled_orders,
+        countIf(event_name = 'order_refunded') AS refunded_orders,
+        countIf(event_name = 'order_failed') AS failed_orders,
+        sumIf(
+          JSONExtractFloat(properties, 'order_total'),
+          event_name IN ('order_cancelled', 'order_refunded', 'order_failed')
+        ) AS cancelled_revenue
+      FROM tracer.ecommerce_events
+      WHERE site_id = ${quotedSite}
+        AND ${eventFilter}
     `),
     clickhouseQuery(`
       SELECT
@@ -1075,9 +1099,11 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
   const quality = latest(qualityRows, {})
   const checkoutHealth = latest(checkoutHealthRows, {})
   const site = latest(siteRows, {})
+  const orderLifecycle = latest(orderLifecycleRows, {})
   const internalDomains = internalDomainsFromSite(site)
   const sessions = num(summary.sessions)
   const revenue = num(summary.revenue)
+  const cancelledRevenue = num(orderLifecycle.cancelled_revenue)
 
   if (!sessions && !num(dataset.rows)) {
     return emptyInsights(siteId)
@@ -1258,6 +1284,11 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
       sales: {
         revenue_tnd: revenue,
         average_order_value_tnd: conversion.purchase_sessions ? revenue / conversion.purchase_sessions : null,
+        cancelled_orders: num(orderLifecycle.cancelled_orders),
+        refunded_orders: num(orderLifecycle.refunded_orders),
+        failed_orders: num(orderLifecycle.failed_orders),
+        cancelled_revenue_tnd: cancelledRevenue,
+        net_revenue_tnd: Math.max(revenue - cancelledRevenue, 0),
       },
     },
     commercial_funnel: buildFunnel(summary),

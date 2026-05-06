@@ -205,6 +205,10 @@ function downloadReportCsv(insights: BehaviorInsights) {
     ["overview", "sessions", insights.business_overview.reach.sessions, ""],
     ["overview", "visitors", insights.business_overview.reach.visitors, ""],
     ["overview", "revenue_tnd", insights.business_overview.sales.revenue_tnd, ""],
+    ["overview", "net_revenue_tnd", insights.business_overview.sales.net_revenue_tnd, ""],
+    ["overview", "cancelled_orders", insights.business_overview.sales.cancelled_orders, `${insights.business_overview.sales.cancelled_revenue_tnd} TND affected`],
+    ["overview", "refunded_orders", insights.business_overview.sales.refunded_orders, ""],
+    ["overview", "failed_orders", insights.business_overview.sales.failed_orders, ""],
     ["overview", "average_order_value_tnd", insights.business_overview.sales.average_order_value_tnd, ""],
     ["overview", "purchase_rate_pct", insights.business_overview.conversion.session_to_purchase_rate_pct, ""],
     ["overview", "checkout_conversion_pct", insights.business_overview.conversion.checkout_to_purchase_rate_pct, ""],
@@ -848,6 +852,9 @@ function SalesPerformanceSection({ insights }: { insights: BehaviorInsights }) {
   const [range, setRange] = useState<SalesRange>("daily")
   const sales = useMemo(() => buildSalesView(insights, range), [insights, range])
   const hasRevenue = sales.totals.revenue > 0
+  const lifecycleLosses = insights.business_overview.sales.cancelled_orders +
+    insights.business_overview.sales.refunded_orders +
+    insights.business_overview.sales.failed_orders
 
   return (
     <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_330px]">
@@ -936,6 +943,13 @@ function SalesPerformanceSection({ insights }: { insights: BehaviorInsights }) {
           delta={sales.cartAbandonmentDelta}
           positiveWhenUp={false}
           helper="Users who added to cart but left without buying."
+        />
+        <SalesMetricCard
+          title="Order Losses"
+          value={fmtInt(lifecycleLosses)}
+          delta={0}
+          positiveWhenUp={false}
+          helper={`${fmtMoneyAmount(insights.business_overview.sales.cancelled_revenue_tnd)} from cancelled, refunded, or failed orders.`}
         />
       </aside>
     </section>
