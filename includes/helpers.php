@@ -88,17 +88,24 @@ function bt_get_cart_data()
 function bt_send_event($event_data)
 {
     $config_file = BT_PLUGIN_DIR . 'config.php';
-    if (!file_exists($config_file)) {
-        return false;
-    }
+    $config = file_exists($config_file) ? include($config_file) : array();
 
-    $config = include($config_file);
-    $webhook_url = isset($config['webhook_url']) ? $config['webhook_url'] : '';
-    $server_secret_key = isset($config['server_secret_key'])
-        ? $config['server_secret_key']
-        : (isset($config['secret_key']) ? $config['secret_key'] : '');
+    $webhook_url_override = get_option('bt_webhook_url', '');
+    $webhook_url = !empty($webhook_url_override)
+        ? $webhook_url_override
+        : (isset($config['webhook_url']) ? $config['webhook_url'] : 'https://tracker.yatootunisie.tn/webhook');
 
-    if (empty($webhook_url)) {
+    $server_secret_key_override = get_option('bt_server_secret_key', '');
+    $server_secret_key = !empty($server_secret_key_override)
+        ? $server_secret_key_override
+        : (isset($config['server_secret_key'])
+            ? $config['server_secret_key']
+            : (isset($config['secret_key']) ? $config['secret_key'] : ''));
+
+    if (empty($webhook_url) || empty($server_secret_key)) {
+        if (get_option('bt_debug_mode', '0') === '1') {
+            error_log('[Behaviour Tracker] Server event skipped: missing webhook URL or server secret key.');
+        }
         return false;
     }
 

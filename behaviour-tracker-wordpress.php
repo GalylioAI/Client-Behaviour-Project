@@ -3,7 +3,7 @@
  * Plugin Name: Behaviour Tracker for WordPress
  * Plugin URI: https://github.com/GalylioAI/Client-Behaviour-Project/tree/wp
  * Description: Tracks customer behaviour and sends data to a webhook for analysis. WordPress/WooCommerce Behaviour Tracker.
- * Version: 1.0.3
+ * Version: 1.0.4
  * Author: Galylio
  * Author URI: https://galylio.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('BT_VERSION', '1.0.3');
+define('BT_VERSION', '1.0.4');
 define('BT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('BT_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('BT_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -195,7 +195,9 @@ class BehaviourTrackerWordPress
 
         // General
         add_option('bt_website_id', '');
+        add_option('bt_webhook_url', 'https://tracker.yatootunisie.tn/webhook');
         add_option('bt_write_key', '');
+        add_option('bt_server_secret_key', '');
     }
 
     /**
@@ -240,7 +242,9 @@ class BehaviourTrackerWordPress
     {
         return array(
             'bt_website_id',
+            'bt_webhook_url',
             'bt_write_key',
+            'bt_server_secret_key',
             'bt_sec_session_nav',
             'bt_event_page_view',
             'bt_el_pv_url',
@@ -406,6 +410,10 @@ class BehaviourTrackerWordPress
             : (isset($this->config['write_key'])
                 ? $this->config['write_key']
                 : (isset($this->config['public_write_key']) ? $this->config['public_write_key'] : ''));
+        $webhook_url_override = get_option('bt_webhook_url', '');
+        $webhook_url = !empty($webhook_url_override)
+            ? $webhook_url_override
+            : (isset($this->config['webhook_url']) ? $this->config['webhook_url'] : 'https://tracker.yatootunisie.tn/webhook');
 
         $config = array(
             // Section 1: Session & Navigation
@@ -475,7 +483,7 @@ class BehaviourTrackerWordPress
             'BT_SOURCE' => 'client_js',
         );
 
-        wp_localize_script('bt-buffer', 'behaviourTrackerWebhookUrl', isset($this->config['webhook_url']) ? $this->config['webhook_url'] : '');
+        wp_localize_script('bt-buffer', 'behaviourTrackerWebhookUrl', $webhook_url);
         wp_localize_script('bt-buffer', 'bt_customer_id', $current_user->ID > 0 ? $current_user->ID : 'guest');
         wp_localize_script('bt-buffer', 'bt_customer_email', $current_user->ID > 0 ? $current_user->user_email : null);
         wp_localize_script('bt-buffer', 'bt_page_type', $page_type);
