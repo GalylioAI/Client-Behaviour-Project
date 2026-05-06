@@ -1261,7 +1261,7 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
     },
     business_overview: {
       reach: {
-        raw_events: num(summary.raw_events),
+        raw_events: num(dataset.rows),
         sessions,
         visitors: num(summary.visitors),
         repeat_visitor_rate_pct: safePct(num(loyalty.multi_session_visitors), num(loyalty.single_session_visitors) + num(loyalty.multi_session_visitors)),
