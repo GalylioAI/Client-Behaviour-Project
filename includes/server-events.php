@@ -10,6 +10,7 @@ if (!defined('ABSPATH')) {
 
 class BT_Server_Events
 {
+    const PURCHASE_TRACKED_META = '_bt_purchase_completed_tracked_at';
 
     public function __construct()
     {
@@ -21,8 +22,15 @@ class BT_Server_Events
      */
     private function init_hooks()
     {
-        // WooCommerce order completed
+        // WooCommerce purchase tracking. Do not rely only on the thank-you page:
+        // affiliate flows, blocked redirects, or abandoned browser sessions can still
+        // create valid orders without loading that page.
+        add_action('woocommerce_checkout_order_processed', array($this, 'track_purchase_completed'), 20, 1);
         add_action('woocommerce_thankyou', array($this, 'track_purchase_completed'), 10, 1);
+        add_action('woocommerce_payment_complete', array($this, 'track_purchase_completed'), 20, 1);
+        add_action('woocommerce_order_status_processing', array($this, 'track_purchase_completed'), 20, 1);
+        add_action('woocommerce_order_status_completed', array($this, 'track_purchase_completed'), 20, 1);
+        add_action('woocommerce_order_status_on-hold', array($this, 'track_purchase_completed'), 20, 1);
 
         // User registration
         add_action('user_register', array($this, 'track_registration'), 10, 1);
@@ -49,7 +57,9 @@ class BT_Server_Events
             return;
         }
 
-        $customer_data = bt_get_customer_data();
+        if ($this->should_skip_order($order)) {
+            return;
+        }
 
         // Build items array
         $items = array();
@@ -64,13 +74,21 @@ class BT_Server_Events
             );
         }
 
+        $customer_data = bt_get_customer_data();
+        $customer_id = $order->get_customer_id();
+        if (empty($customer_id)) {
+            $customer_id = isset($customer_data['customer_id']) ? $customer_data['customer_id'] : 'guest';
+        }
+
         $event_data = array(
             'event' => 'purchase_completed',
             'event_type' => 'CHECKOUT & PURCHASE EVENTS',
             'timestamp' => current_time('c'),
-            'customer_id' => $customer_data['customer_id'],
+            'customer_id' => $customer_id,
             'customer_email' => $order->get_billing_email(),
             'order_id' => $order_id,
+            'order_key' => $order->get_order_key(),
+            'order_status' => $order->get_status(),
             'order_total' => $order->get_total(),
             'order_subtotal' => $order->get_subtotal(),
             'tax_amount' => $order->get_total_tax(),
@@ -84,7 +102,25 @@ class BT_Server_Events
             'shipping_country' => $order->get_shipping_country(),
         );
 
-        bt_send_event($event_data);
+        if (bt_send_event($event_data)) {
+            $order->update_meta_data(self::PURCHASE_TRACKED_META, current_time('mysql'));
+            $order->save();
+        } elseif (get_option('bt_debug_mode', '0') === '1') {
+            error_log('[Behaviour Tracker] Failed to send purchase_completed for order ' . $order_id);
+        }
+    }
+
+    /**
+     * Prevent duplicate revenue and ignore orders that should not count as sales.
+     */
+    private function should_skip_order($order)
+    {
+        if ($order->get_meta(self::PURCHASE_TRACKED_META)) {
+            return true;
+        }
+
+        $ignored_statuses = array('cancelled', 'failed', 'refunded', 'trash');
+        return in_array($order->get_status(), $ignored_statuses, true);
     }
 
     /**

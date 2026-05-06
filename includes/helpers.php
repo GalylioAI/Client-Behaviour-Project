@@ -142,7 +142,22 @@ function bt_send_event($event_data)
         )),
     ));
 
-    return !is_wp_error($response);
+    if (is_wp_error($response)) {
+        if (get_option('bt_debug_mode', '0') === '1') {
+            error_log('[Behaviour Tracker] Server event send failed: ' . $response->get_error_message());
+        }
+        return false;
+    }
+
+    $status_code = wp_remote_retrieve_response_code($response);
+    if ($status_code < 200 || $status_code >= 300) {
+        if (get_option('bt_debug_mode', '0') === '1') {
+            error_log('[Behaviour Tracker] Server event rejected with HTTP ' . $status_code . ': ' . wp_remote_retrieve_body($response));
+        }
+        return false;
+    }
+
+    return true;
 }
 
 /**
