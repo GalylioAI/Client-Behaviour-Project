@@ -247,7 +247,7 @@ function bt_normalize_event_category($category, $event_name = '')
     if (strpos($value, 'cart') !== false) {
         return 'cart';
     }
-    if (strpos($value, 'checkout') !== false || strpos($value, 'purchase') !== false || strpos($value, 'payment') !== false) {
+    if (strpos($value, 'checkout') !== false || strpos($value, 'purchase') !== false || strpos($value, 'payment') !== false || strpos($value, 'order') !== false) {
         return 'checkout';
     }
     if (strpos($value, 'account') !== false || strpos($value, 'user') !== false) {
@@ -266,7 +266,7 @@ function bt_normalize_event_category($category, $event_name = '')
     if (strpos($name, 'cart') !== false || strpos($name, 'coupon') !== false) {
         return 'cart';
     }
-    if (strpos($name, 'checkout') !== false || strpos($name, 'purchase') !== false || strpos($name, 'payment') !== false || strpos($name, 'shipping') !== false) {
+    if (strpos($name, 'checkout') !== false || strpos($name, 'purchase') !== false || strpos($name, 'payment') !== false || strpos($name, 'shipping') !== false || strpos($name, 'order_') !== false || strpos($name, 'cancel') !== false || strpos($name, 'refund') !== false) {
         return 'checkout';
     }
     if (strpos($name, 'login') !== false || strpos($name, 'logout') !== false || strpos($name, 'registration') !== false || strpos($name, 'password') !== false || strpos($name, 'profile') !== false || strpos($name, 'wishlist') !== false || strpos($name, 'address') !== false) {

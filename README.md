@@ -25,7 +25,7 @@ Configure these values in Settings > Behaviour Tracker:
 - **Website Identifier**: Your SaaS `site_id`
 - **Webhook URL**: Your tracker endpoint
 - **Public Write Key**: Used by browser events
-- **Server Secret Key**: Used by WooCommerce server-side purchases, registrations, and login events
+- **Server Secret Key**: Used by WooCommerce server-side purchases, order status changes, registrations, and login events
 
 `config.php` is still supported for advanced overrides such as selector customization and buffer interval.
 
@@ -41,7 +41,7 @@ Configure these values in Settings > Behaviour Tracker:
 - ADD_TO_CART, REMOVE_FROM_CART, CART_VIEW, CART_QUANTITY_CHANGE, APPLY_COUPON
 
 ### 4. Checkout & Purchase
-- CHECKOUT_START, CHECKOUT_STEP, SHIPPING_METHOD, PAYMENT_METHOD, PURCHASE_COMPLETED, PAYMENT_FAILED
+- CHECKOUT_START, CHECKOUT_STEP, SHIPPING_METHOD, PAYMENT_METHOD, PURCHASE_COMPLETED, ORDER_STATUS_CHANGED, ORDER_CANCELLED, ORDER_REFUNDED, ORDER_FAILED, PAYMENT_FAILED
 
 ### 5. User Account
 - REGISTRATION, LOGIN, LOGOUT, PASSWORD_RESET, PROFILE_UPDATE, WISHLIST, ADDRESS_BOOK

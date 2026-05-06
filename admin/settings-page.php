@@ -308,6 +308,9 @@ $get_text_option = function ($key, $default = '') {
             <label><input type="checkbox" name="bt_event_purchase_completed" value="1" <?php checked($get_option('bt_event_purchase_completed')); ?>>
                 <?php _e('Purchase Completed', 'behaviour-tracker'); ?>
             </label><br>
+            <label><input type="checkbox" name="bt_event_order_status_changed" value="1" <?php checked($get_option('bt_event_order_status_changed')); ?>>
+                <?php _e('Order Status Changed / Cancelled', 'behaviour-tracker'); ?>
+            </label><br>
             <label><input type="checkbox" name="bt_event_payment_failed" value="1" <?php checked($get_option('bt_event_payment_failed')); ?>>
                 <?php _e('Payment Failed', 'behaviour-tracker'); ?>
             </label>

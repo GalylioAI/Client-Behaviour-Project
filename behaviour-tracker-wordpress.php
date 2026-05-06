@@ -3,7 +3,7 @@
  * Plugin Name: Behaviour Tracker for WordPress
  * Plugin URI: https://github.com/GalylioAI/Client-Behaviour-Project/tree/wp
  * Description: Tracks customer behaviour and sends data to a webhook for analysis. WordPress/WooCommerce Behaviour Tracker.
- * Version: 1.0.5
+ * Version: 1.0.6
  * Author: Galylio
  * Author URI: https://galylio.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('BT_VERSION', '1.0.5');
+define('BT_VERSION', '1.0.6');
 define('BT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('BT_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('BT_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -169,6 +169,7 @@ class BehaviourTrackerWordPress
         add_option('bt_event_shipping_method', '1');
         add_option('bt_event_payment_method', '1');
         add_option('bt_event_purchase_completed', '1');
+        add_option('bt_event_order_status_changed', '1');
         add_option('bt_event_payment_failed', '1');
 
         // Section 5: Account
@@ -268,6 +269,7 @@ class BehaviourTrackerWordPress
             'bt_event_shipping_method',
             'bt_event_payment_method',
             'bt_event_purchase_completed',
+            'bt_event_order_status_changed',
             'bt_event_payment_failed',
             'bt_event_registration',
             'bt_event_login',
@@ -446,6 +448,7 @@ class BehaviourTrackerWordPress
             'BT_EVENT_SHIPPING_METHOD' => get_option('bt_event_shipping_method', '1'),
             'BT_EVENT_PAYMENT_METHOD' => get_option('bt_event_payment_method', '1'),
             'BT_EVENT_PURCHASE_COMPLETED' => get_option('bt_event_purchase_completed', '1'),
+            'BT_EVENT_ORDER_STATUS_CHANGED' => get_option('bt_event_order_status_changed', '1'),
             'BT_EVENT_PAYMENT_FAILED' => get_option('bt_event_payment_failed', '1'),
 
             // Section 5: User Account

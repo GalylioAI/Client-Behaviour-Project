@@ -11,6 +11,7 @@ if (!defined('ABSPATH')) {
 class BT_Server_Events
 {
     const PURCHASE_TRACKED_META = '_bt_purchase_completed_tracked_at';
+    const STATUS_TRACKED_META = '_bt_order_status_events_tracked';
 
     public function __construct()
     {
@@ -31,6 +32,7 @@ class BT_Server_Events
         add_action('woocommerce_order_status_processing', array($this, 'track_purchase_completed'), 20, 1);
         add_action('woocommerce_order_status_completed', array($this, 'track_purchase_completed'), 20, 1);
         add_action('woocommerce_order_status_on-hold', array($this, 'track_purchase_completed'), 20, 1);
+        add_action('woocommerce_order_status_changed', array($this, 'track_order_status_changed'), 20, 4);
 
         // User registration
         add_action('user_register', array($this, 'track_registration'), 10, 1);
@@ -121,6 +123,83 @@ class BT_Server_Events
 
         $ignored_statuses = array('cancelled', 'failed', 'refunded', 'trash');
         return in_array($order->get_status(), $ignored_statuses, true);
+    }
+
+    /**
+     * Track backend/admin order status changes after the original purchase event.
+     */
+    public function track_order_status_changed($order_id, $from_status, $to_status, $order)
+    {
+        if (!bt_is_event_enabled('bt_event_order_status_changed')) {
+            return;
+        }
+
+        if (!$order) {
+            $order = wc_get_order($order_id);
+        }
+        if (!$order) {
+            return;
+        }
+
+        $event_name = $this->event_name_for_order_status($to_status);
+        $transition_key = sanitize_key($from_status . '_to_' . $to_status . '_' . gmdate('YmdHis'));
+        $tracked = $order->get_meta(self::STATUS_TRACKED_META);
+        $tracked = is_array($tracked) ? $tracked : array();
+
+        if (isset($tracked[$transition_key])) {
+            return;
+        }
+
+        $current_user = function_exists('wp_get_current_user') ? wp_get_current_user() : null;
+        $actor_id = ($current_user && isset($current_user->ID)) ? (int) $current_user->ID : 0;
+
+        $event_data = array(
+            'event_id' => 'woocommerce_order_' . (int) $order_id . '_status_' . $transition_key,
+            'event' => $event_name,
+            'event_type' => 'ORDER LIFECYCLE EVENTS',
+            'timestamp' => current_time('c'),
+            'customer_id' => $order->get_customer_id() ?: 'guest',
+            'customer_email' => $order->get_billing_email(),
+            'order_id' => $order_id,
+            'order_key' => $order->get_order_key(),
+            'order_status_previous' => $from_status,
+            'order_status' => $to_status,
+            'order_status_change_type' => $event_name,
+            'order_total' => $order->get_total(),
+            'order_subtotal' => $order->get_subtotal(),
+            'tax_amount' => $order->get_total_tax(),
+            'shipping_cost' => $order->get_shipping_total(),
+            'discount_amount' => $order->get_discount_total(),
+            'payment_method' => $order->get_payment_method(),
+            'shipping_method' => $order->get_shipping_method(),
+            'currency' => $order->get_currency(),
+            'changed_by_user_id' => $actor_id,
+            'changed_by_user_email' => ($current_user && !empty($current_user->user_email)) ? $current_user->user_email : '',
+            'changed_in_admin' => is_admin(),
+        );
+
+        if (bt_send_event($event_data)) {
+            $tracked[$transition_key] = current_time('mysql');
+            $order->update_meta_data(self::STATUS_TRACKED_META, $tracked);
+            $order->save();
+        } elseif (get_option('bt_debug_mode', '0') === '1') {
+            error_log('[Behaviour Tracker] Failed to send ' . $event_name . ' for order ' . $order_id);
+        }
+    }
+
+    private function event_name_for_order_status($status)
+    {
+        if ($status === 'cancelled') {
+            return 'order_cancelled';
+        }
+        if ($status === 'refunded') {
+            return 'order_refunded';
+        }
+        if ($status === 'failed') {
+            return 'order_failed';
+        }
+
+        return 'order_status_changed';
     }
 
     /**
