@@ -589,14 +589,21 @@ async def validate_site_access(request: Request, envelope: dict, events: list) -
         inc("events_auth_rejected_total", len(events))
         raise HTTPException(status_code=403, detail="Platform does not match registered site")
 
+    source = extract_source(envelope, events)
+    write_key = extract_write_key(request, envelope, events)
+    if source == "server_php":
+        if key_matches(site, write_key, source):
+            return site
+
+        inc("events_auth_rejected_total", len(events))
+        raise HTTPException(status_code=401, detail="Invalid or missing server secret key")
+
     origin = request.headers.get("origin", "")
     referer = request.headers.get("referer", "")
     if not is_origin_allowed(origin, referer, site):
         inc("events_auth_rejected_total", len(events))
         raise HTTPException(status_code=403, detail="Origin is not allowed for this site")
 
-    source = extract_source(envelope, events)
-    write_key = extract_write_key(request, envelope, events)
     if key_matches(site, write_key, source):
         return site
 
