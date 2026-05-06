@@ -9,7 +9,7 @@
 return [
     // The URL where the tracking data is sent.
     // Can also be configured in Settings > Behaviour Tracker.
-    'webhook_url' => 'https://server.yatootunisie.tn/webhook',
+    'webhook_url' => 'https://tracker.yatootunisie.tn/webhook',
 
     // Unique identifier for this website/store (sent as site_id).
     // Can also be configured in Settings > Behaviour Tracker.

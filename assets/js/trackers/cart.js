@@ -3,6 +3,8 @@
  * WooCommerce Integration
  */
 const BehaviourTrackerCart = {
+    recentAddToCart: {},
+
     init: function () {
         this.trackCartView();
         this.hookWooCommerceEvents();
@@ -44,6 +46,16 @@ const BehaviourTrackerCart = {
             this.trackAddToCart(button);
         });
 
+        // Fallback for themes that use normal product forms or custom buttons
+        // and do not trigger WooCommerce's AJAX added_to_cart event.
+        jQuery(document.body).on(
+            'click',
+            '.single_add_to_cart_button, .add_to_cart_button, button[name="add-to-cart"], [name="add-to-cart"]',
+            (event) => {
+                this.trackAddToCart(event.currentTarget);
+            }
+        );
+
         // Removed from cart (listen to remove button clicks)
         jQuery(document.body).on('click', '.remove, a.remove', (e) => {
             const target = e.currentTarget;
@@ -60,11 +72,25 @@ const BehaviourTrackerCart = {
         // Check Config
         if (typeof bt_config !== 'undefined' && bt_config.BT_EVENT_CART_UPDATE == '0') return;
 
-        const productId = button?.getAttribute('data-product_id') ||
-            button?.closest('[data-product_id]')?.getAttribute('data-product_id');
-        const productName = button?.getAttribute('data-product_name') ||
-            button?.closest('.product')?.querySelector('.product_title, h2, h3')?.innerText;
-        const quantity = button?.getAttribute('data-quantity') || 1;
+        const element = this.resolveElement(button);
+        const form = element?.closest('form.cart, form');
+        const productId = element?.getAttribute('data-product_id') ||
+            element?.getAttribute('value') ||
+            form?.querySelector('[name="add-to-cart"]')?.value ||
+            form?.querySelector('[name="product_id"]')?.value ||
+            form?.querySelector('[name="variation_id"]')?.value ||
+            element?.closest('[data-product_id]')?.getAttribute('data-product_id');
+        const productName = element?.getAttribute('data-product_name') ||
+            element?.closest('.product')?.querySelector('.product_title, h1, h2, h3')?.innerText ||
+            document.querySelector('.product_title')?.innerText ||
+            document.querySelector('h1')?.innerText;
+        const quantity = element?.getAttribute('data-quantity') ||
+            form?.querySelector('[name="quantity"]')?.value ||
+            1;
+
+        if (this.isDuplicateAddToCart(productId || productName || 'unknown')) {
+            return;
+        }
 
         const data = {
             event: 'add_to_cart',
@@ -79,6 +105,20 @@ const BehaviourTrackerCart = {
         };
 
         this.sendData(data);
+    },
+
+    resolveElement: function (value) {
+        if (!value) return null;
+        if (value.jquery && typeof value.get === 'function') return value.get(0);
+        if (value instanceof Element) return value;
+        return null;
+    },
+
+    isDuplicateAddToCart: function (key) {
+        const now = Date.now();
+        const last = this.recentAddToCart[key] || 0;
+        this.recentAddToCart[key] = now;
+        return now - last < 1500;
     },
 
     /**

@@ -19,6 +19,7 @@ const BehaviourTrackerBuffer = {
     isFlushing: false,
     visitorId: null,
     debug: false,
+    storageKey: 'bt_event_buffer_v1',
 
     /**
      * Initialize the buffer
@@ -41,6 +42,7 @@ const BehaviourTrackerBuffer = {
         this.config.writeKey = config.BT_WRITE_KEY || config.BT_PUBLIC_WRITE_KEY || this.config.writeKey;
         this.debug = config.BT_DEBUG_MODE === '1' || config.BT_DEBUG_MODE === true;
         this.visitorId = this.resolveVisitorId();
+        this.loadPersistedBuffer();
 
         this.startTimer();
 
@@ -69,6 +71,7 @@ const BehaviourTrackerBuffer = {
         }
 
         this.buffer.push(this.normalizeEvent(eventData));
+        this.persistBuffer();
         if (this.debug) BehaviourTrackerLogger.log('Event added. Buffer size: ' + this.buffer.length);
 
         if (this.buffer.length >= this.config.batchSize) {
@@ -83,6 +86,7 @@ const BehaviourTrackerBuffer = {
         this.isFlushing = true;
         const eventsToSend = [...this.buffer];
         this.buffer = [];
+        this.persistBuffer();
 
         this.sendBatch(eventsToSend);
     },
@@ -95,6 +99,7 @@ const BehaviourTrackerBuffer = {
     sendBatch: function (events, retryCount = 0) {
         if (!this.config.webhookUrl) {
             BehaviourTrackerLogger.error('Webhook URL not defined.');
+            this.restoreEvents(events);
             this.isFlushing = false;
             return;
         }
@@ -111,8 +116,16 @@ const BehaviourTrackerBuffer = {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify(payload)
+        }).then(response => {
+            if (!response.ok) {
+                return response.text().then(text => {
+                    throw new Error(`HTTP ${response.status}: ${text.slice(0, 250)}`);
+                });
+            }
+            return response;
         }).then(() => {
             this.isFlushing = false;
+            this.persistBuffer();
             if (this.debug) BehaviourTrackerLogger.log('Batch sent successfully');
         }).catch(err => {
             BehaviourTrackerLogger.error('Failed to send event batch', err);
@@ -122,9 +135,47 @@ const BehaviourTrackerBuffer = {
                     this.sendBatch(events, retryCount + 1);
                 }, 2000 * (retryCount + 1));
             } else {
+                this.restoreEvents(events);
                 this.isFlushing = false;
             }
         });
+    },
+
+    restoreEvents: function (events) {
+        if (!Array.isArray(events) || events.length === 0) return;
+
+        const room = Math.max(this.config.maxBuffer - this.buffer.length, 0);
+        const restored = room > 0 ? events.slice(-room) : [];
+        this.buffer = restored.concat(this.buffer);
+        this.persistBuffer();
+
+        if (this.debug) {
+            BehaviourTrackerLogger.warn(`Restored ${restored.length} unsent events. Buffer size: ${this.buffer.length}`);
+        }
+    },
+
+    persistBuffer: function () {
+        try {
+            if (!window.localStorage) return;
+            window.localStorage.setItem(this.storageKey, JSON.stringify(this.buffer.slice(-this.config.maxBuffer)));
+        } catch (err) {
+            if (this.debug) BehaviourTrackerLogger.warn('Could not persist event buffer', err);
+        }
+    },
+
+    loadPersistedBuffer: function () {
+        try {
+            if (!window.localStorage) return;
+            const stored = window.localStorage.getItem(this.storageKey);
+            if (!stored) return;
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed)) {
+                this.buffer = parsed.filter(event => this.isPlainObject(event)).slice(-this.config.maxBuffer);
+            }
+        } catch (err) {
+            this.buffer = [];
+            if (this.debug) BehaviourTrackerLogger.warn('Could not load persisted event buffer', err);
+        }
     },
 
     handleUnload: function () {
@@ -132,6 +183,7 @@ const BehaviourTrackerBuffer = {
 
         const payload = JSON.stringify(this.buildEnvelope(this.buffer, true));
         this.buffer = [];
+        this.persistBuffer();
 
         if (navigator.sendBeacon && this.config.webhookUrl) {
             const success = navigator.sendBeacon(this.config.webhookUrl, payload);
