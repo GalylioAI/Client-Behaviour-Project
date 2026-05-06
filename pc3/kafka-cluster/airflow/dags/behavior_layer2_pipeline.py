@@ -501,6 +501,14 @@ ORDER_TOTAL = (
     f"greatest({json_number('order_total')}, {json_number('cart_total_value')}, "
     f"{json_number('cart_total_after')}, {json_number('cart_total_before')})"
 )
+ORDER_ID = (
+    f"coalesce(nullIf({json_text('order_id')}, ''), "
+    f"nullIf({json_text('order_reference')}, ''), "
+    f"nullIf({json_text('order_number')}, ''), "
+    f"nullIf({json_text('id_order')}, ''), "
+    f"nullIf({json_text('transaction_id')}, ''), "
+    f"nullIf({json_text('order_key')}, ''), '')"
+)
 CART_VALUE = (
     f"greatest({json_number('cart_total_value')}, {json_number('cart_total_after')}, "
     f"{json_number('cart_total_before')})"
@@ -587,19 +595,10 @@ def refresh_session_features(client: ClickHouseHttpClient, site_id: str, start: 
     client.execute(
         f"""
         INSERT INTO session_features
-        WITH
-            {PRODUCT_ID} AS product_key,
-            {ORDER_TOTAL} AS order_total_value,
-            {CART_VALUE} AS cart_value,
-            {SCROLL_PCT} AS scroll_pct,
-            {DEVICE_TYPE} AS device_key,
-            {IS_NEW_VISITOR} AS new_visitor_flag,
-            {NEWSLETTER_OPT_IN} AS newsletter_flag,
-            {REFERRER_URL} AS referrer_key
         SELECT
             site_id,
             coalesce(nullIf(anyLast(platform), ''), 'unknown') AS platform,
-            session_id,
+            session_key AS session_id,
             coalesce(nullIf(anyLast(visitor_id), ''), '') AS visitor_id,
             coalesce(nullIf(anyLast(customer_id), ''), '') AS customer_id,
             anyLast(customer_email) AS customer_email,
@@ -621,7 +620,7 @@ def refresh_session_features(client: ClickHouseHttpClient, site_id: str, start: 
             countIf(event_name = 'checkout_shipping_method_selected') AS shipping_selection_count,
             countIf(event_name = 'checkout_payment_method_selected') AS payment_selection_count,
             countIf(event_name = 'payment_failed') AS payment_failed_count,
-            countIf(event_name = 'purchase_completed') AS purchase_count,
+            uniqExactIf(purchase_key, event_name = 'purchase_completed' AND purchase_key != '') AS purchase_count,
             countIf(event_name = 'account_registration') AS registration_count,
             countIf(event_name = 'login') AS login_count,
             countIf(newsletter_flag) AS newsletter_opt_in_count,
@@ -630,8 +629,12 @@ def refresh_session_features(client: ClickHouseHttpClient, site_id: str, start: 
             uniqExactIf(product_key, event_name = 'add_to_cart' AND product_key != '') AS unique_products_added_cart,
             toFloat32(max(scroll_pct)) AS max_scroll_pct,
             max(cart_value) AS cart_value_max,
-            max(order_total_value) AS order_total_max,
-            sumIf(order_total_value, event_name = 'purchase_completed') AS revenue,
+            maxIf(order_total_value, event_name = 'purchase_completed') AS order_total_max,
+            if(
+                purchase_count <= 1,
+                order_total_max,
+                sumIf(order_total_value, event_name = 'purchase_completed')
+            ) AS revenue,
             coalesce(nullIf(argMax(device_key, event_timestamp), ''), 'unknown') AS device_type,
             coalesce(nullIf(argMin(ifNull(page_type, ''), event_timestamp), ''), 'unknown') AS first_page_type,
             coalesce(nullIf(argMin(ifNull(page_url, ''), event_timestamp), ''), '') AS first_page_url,
@@ -649,19 +652,65 @@ def refresh_session_features(client: ClickHouseHttpClient, site_id: str, start: 
             toUInt8(add_to_cart_count > 0 AND purchase_count = 0) AS is_cart_abandoned,
             toUInt8(checkout_start_count > 0 AND purchase_count = 0) AS is_checkout_abandoned,
             now64(3) AS updated_at
-        FROM ecommerce_events
-        WHERE site_id = {quote(site_id)}
-          AND session_id != ''
-          AND session_id IN
-          (
-              SELECT DISTINCT session_id
-              FROM ecommerce_events
-              WHERE site_id = {quote(site_id)}
-                AND event_timestamp >= {dt_literal(start)}
-                AND event_timestamp < {dt_literal(end)}
-                AND session_id != ''
-          )
-        GROUP BY site_id, session_id
+        FROM
+        (
+            SELECT
+                *,
+                if(
+                    session_id != '',
+                    session_id,
+                    if(
+                        order_key != '',
+                        concat('server_order:', order_key),
+                        concat('server_purchase:', toString(cityHash64(raw_event, toString(event_timestamp))))
+                    )
+                ) AS session_key,
+                if(
+                    event_name = 'purchase_completed',
+                    if(
+                        order_key != '',
+                        order_key,
+                        concat('__event__:', toString(cityHash64(raw_event, toString(event_timestamp))))
+                    ),
+                    ''
+                ) AS purchase_key
+            FROM
+            (
+                SELECT
+                    *,
+                    {PRODUCT_ID} AS product_key,
+                    {ORDER_TOTAL} AS order_total_value,
+                    {CART_VALUE} AS cart_value,
+                    {SCROLL_PCT} AS scroll_pct,
+                    {DEVICE_TYPE} AS device_key,
+                    {ORDER_ID} AS order_key,
+                    {IS_NEW_VISITOR} AS new_visitor_flag,
+                    {NEWSLETTER_OPT_IN} AS newsletter_flag,
+                    {REFERRER_URL} AS referrer_key
+                FROM ecommerce_events
+                WHERE site_id = {quote(site_id)}
+                  AND (
+                      (
+                          session_id != ''
+                          AND session_id IN
+                          (
+                              SELECT DISTINCT session_id
+                              FROM ecommerce_events
+                              WHERE site_id = {quote(site_id)}
+                                AND event_timestamp >= {dt_literal(start)}
+                                AND event_timestamp < {dt_literal(end)}
+                                AND session_id != ''
+                          )
+                      )
+                      OR (
+                          event_name = 'purchase_completed'
+                          AND event_timestamp >= {dt_literal(start)}
+                          AND event_timestamp < {dt_literal(end)}
+                      )
+                  )
+            )
+        )
+        GROUP BY site_id, session_key
         """
     )
 
