@@ -21,12 +21,12 @@ const plugins = [
   {
     id: "wordpress",
     name: "WordPress / WooCommerce Tracker",
-    version: "1.0.5",
+    version: "1.0.6",
     platform: "WordPress",
-    fileName: "wordpress-behaviour-tracker-1.0.5.zip",
-    href: "/plugins/wordpress-behaviour-tracker-1.0.5.zip",
+    fileName: "wordpress-behaviour-tracker-1.0.6.zip",
+    href: "/plugins/wordpress-behaviour-tracker-1.0.6.zip",
     size: "40 KB",
-    sha256: "215610534046540de220dbea6f77050c20b6660198acf93bdaf352ba441cd6ed",
+    sha256: "ee26d6dff7591451f5ed3bc3fadd989017319a8e0addf9b4220e64c91bfc914e",
     sourceUrl: "https://github.com/GalylioAI/Client-Behaviour-Project/tree/wp",
     installArea: "WordPress admin -> Plugins -> Add New -> Upload Plugin",
     settingsArea: "Settings -> Behaviour Tracker",
@@ -34,12 +34,12 @@ const plugins = [
   {
     id: "prestashop",
     name: "PrestaShop Behaviour Tracker",
-    version: "1.0.3",
+    version: "1.0.4",
     platform: "PrestaShop",
-    fileName: "behaviourtracker-prestashop-1.0.3.zip",
-    href: "/plugins/behaviourtracker-prestashop-1.0.3.zip",
-    size: "48 KB",
-    sha256: "022e27c6d2aa62de084bc723bf9d7edeb213d35e817472e0c1e25278a7896e2a",
+    fileName: "behaviourtracker-prestashop-1.0.4.zip",
+    href: "/plugins/behaviourtracker-prestashop-1.0.4.zip",
+    size: "49 KB",
+    sha256: "a72ed1cfe1b8d809ecf5d7d6c20b78ee5252060598ca0a8c9a667fb9c0bc6829",
     sourceUrl: "https://github.com/GalylioAI/Client-Behaviour-Project/tree/Prestashop_module",
     installArea: "PrestaShop admin -> Modules -> Module Manager -> Upload a module",
     settingsArea: "Modules -> Customer Behaviour Tracker -> Configure",
@@ -162,7 +162,7 @@ export function DownloadsPage({ siteId }: { siteId?: string }) {
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline" className="border-blue-100 bg-blue-50 text-blue-700">
-                  WordPress 1.0.5 / PrestaShop 1.0.3
+                  WordPress 1.0.6 / PrestaShop 1.0.4
                 </Badge>
                 <Badge variant="outline" className="border-emerald-100 bg-emerald-50 text-emerald-700">
                   <Github className="h-3 w-3" />
