@@ -645,11 +645,11 @@ def refresh_session_features(client: ClickHouseHttpClient, site_id: str, start: 
             coalesce(nullIf(argMax(JSONExtractString(location, 'city'), event_timestamp), ''), '') AS city,
             toUInt8(max(new_visitor_flag)) AS is_new_visitor,
             toUInt8(product_view_count > 0) AS has_product_view,
-            toUInt8(add_to_cart_count > 0) AS has_add_to_cart,
+            toUInt8(add_to_cart_count > 0 OR cart_view_count > 0) AS has_add_to_cart,
             toUInt8(checkout_start_count > 0) AS has_checkout_start,
             toUInt8(purchase_count > 0) AS has_purchase,
             toUInt8(page_view_count <= 1 AND duration_sec <= 15) AS is_bounce,
-            toUInt8(add_to_cart_count > 0 AND purchase_count = 0) AS is_cart_abandoned,
+            toUInt8((add_to_cart_count > 0 OR cart_view_count > 0) AND purchase_count = 0) AS is_cart_abandoned,
             toUInt8(checkout_start_count > 0 AND purchase_count = 0) AS is_checkout_abandoned,
             now64(3) AS updated_at
         FROM
@@ -782,32 +782,89 @@ def refresh_site_hourly_metrics(client: ClickHouseHttpClient, site_id: str, star
     client.execute(
         f"""
         INSERT INTO site_hourly_metrics
-        WITH {ORDER_TOTAL} AS order_total_value
+        WITH
+            raw AS
+            (
+                SELECT
+                    site_id,
+                    coalesce(nullIf(anyLast(platform), ''), 'unknown') AS platform,
+                    toStartOfHour(event_timestamp) AS hour_start,
+                    count() AS raw_events,
+                    uniqExact(session_id) AS sessions,
+                    uniqExact(visitor_id) AS visitors,
+                    countIf(event_name = 'page_view') AS page_views,
+                    countIf(event_name = 'product_view') AS product_views,
+                    countIf(event_name = 'product_impression') AS product_impressions,
+                    countIf(event_name = 'click') AS clicks,
+                    countIf(event_name = 'scroll_depth') AS scroll_events,
+                    countIf(event_type = 'search' OR positionCaseInsensitive(event_name, 'search') > 0) AS search_events,
+                    countIf(event_name = 'search_zero_results') AS zero_result_searches,
+                    countIf(event_name = 'add_to_cart' OR event_name = 'cart_view') AS add_to_cart_events,
+                    countIf(event_name = 'cart_view') AS cart_view_events,
+                    countIf(event_name = 'checkout_start') AS checkout_starts
+                FROM ecommerce_events
+                WHERE site_id = {quote(site_id)}
+                  AND event_timestamp >= {dt_literal(start)}
+                  AND event_timestamp < {dt_literal(end)}
+                GROUP BY site_id, hour_start
+            ),
+            sales AS
+            (
+                SELECT
+                    site_id,
+                    hour_start,
+                    count() AS purchases,
+                    sum(order_total_value) AS revenue
+                FROM
+                (
+                    SELECT
+                        site_id,
+                        toStartOfHour(min(event_timestamp)) AS hour_start,
+                        purchase_key,
+                        max(order_total_value) AS order_total_value
+                    FROM
+                    (
+                        SELECT
+                            site_id,
+                            event_timestamp,
+                            {ORDER_TOTAL} AS order_total_value,
+                            if(
+                                {ORDER_ID} != '',
+                                {ORDER_ID},
+                                concat('__event__:', toString(cityHash64(raw_event, toString(event_timestamp))))
+                            ) AS purchase_key
+                        FROM ecommerce_events
+                        WHERE site_id = {quote(site_id)}
+                          AND event_name = 'purchase_completed'
+                    )
+                    GROUP BY site_id, purchase_key
+                    HAVING hour_start >= {dt_literal(start)}
+                       AND hour_start < {dt_literal(end)}
+                )
+                GROUP BY site_id, hour_start
+            )
         SELECT
-            site_id,
-            coalesce(nullIf(anyLast(platform), ''), 'unknown') AS platform,
-            toStartOfHour(event_timestamp) AS hour_start,
-            count() AS raw_events,
-            uniqExact(session_id) AS sessions,
-            uniqExact(visitor_id) AS visitors,
-            countIf(event_name = 'page_view') AS page_views,
-            countIf(event_name = 'product_view') AS product_views,
-            countIf(event_name = 'product_impression') AS product_impressions,
-            countIf(event_name = 'click') AS clicks,
-            countIf(event_name = 'scroll_depth') AS scroll_events,
-            countIf(event_type = 'search' OR positionCaseInsensitive(event_name, 'search') > 0) AS search_events,
-            countIf(event_name = 'search_zero_results') AS zero_result_searches,
-            countIf(event_name = 'add_to_cart') AS add_to_cart_events,
-            countIf(event_name = 'cart_view') AS cart_view_events,
-            countIf(event_name = 'checkout_start') AS checkout_starts,
-            countIf(event_name = 'purchase_completed') AS purchases,
-            sumIf(order_total_value, event_name = 'purchase_completed') AS revenue,
+            raw.site_id,
+            raw.platform,
+            raw.hour_start,
+            raw.raw_events,
+            raw.sessions,
+            raw.visitors,
+            raw.page_views,
+            raw.product_views,
+            raw.product_impressions,
+            raw.clicks,
+            raw.scroll_events,
+            raw.search_events,
+            raw.zero_result_searches,
+            raw.add_to_cart_events,
+            raw.cart_view_events,
+            raw.checkout_starts,
+            toUInt64(ifNull(sales.purchases, 0)) AS purchases,
+            toFloat64(ifNull(sales.revenue, 0)) AS revenue,
             now64(3) AS updated_at
-        FROM ecommerce_events
-        WHERE site_id = {quote(site_id)}
-          AND event_timestamp >= {dt_literal(start)}
-          AND event_timestamp < {dt_literal(end)}
-        GROUP BY site_id, hour_start
+        FROM raw
+        LEFT JOIN sales USING (site_id, hour_start)
         """
     )
 
@@ -1389,7 +1446,7 @@ if DAG is not None:
         dag_id="behavior_layer2_test_refresh",
         description="Refresh Layer 2 behaviour analytics tables from ClickHouse raw events.",
         start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        schedule=None,
+        schedule="*/15 * * * *",
         catchup=False,
         tags=["behaviour", "layer2", "clickhouse", "test"],
         params={

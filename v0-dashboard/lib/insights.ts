@@ -463,6 +463,7 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
     paymentRows,
     shippingRows,
     qualityRows,
+    checkoutHealthRows,
     insightRows,
     segmentRows,
     recentEventRows,
@@ -690,6 +691,17 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
     `),
     clickhouseQuery(`
       SELECT
+        countIf(checkout_start_count > 0) AS checkout_sessions,
+        countIf(shipping_selection_count > 0) AS shipping_selection_sessions,
+        countIf(payment_selection_count > 0) AS payment_selection_sessions,
+        countIf(payment_failed_count > 0) AS payment_failed_sessions,
+        countIf(has_purchase = 1) AS purchase_sessions
+      FROM tracer.session_features FINAL
+      WHERE site_id = ${quotedSite}
+        AND ${sessionFilter}
+    `),
+    clickhouseQuery(`
+      SELECT
         insight_key,
         category,
         severity,
@@ -785,6 +797,7 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
   const engagement = latest(engagementRows, {})
   const loyalty = latest(loyaltyRows, {})
   const quality = latest(qualityRows, {})
+  const checkoutHealth = latest(checkoutHealthRows, {})
   const site = latest(siteRows, {})
   const sessions = num(summary.sessions)
   const revenue = num(summary.revenue)
@@ -843,6 +856,10 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
     .sort((a, b) => b.sessions - a.sessions)
   const eventMix = Object.fromEntries(eventRows.map((row) => [str(row.event_name, "unknown"), num(row.events)]))
   const dataQualityTotal = num(quality.total_events)
+  const checkoutSessions = num(checkoutHealth.checkout_sessions) || conversion.checkout_sessions
+  const shippingSelectionSessions = num(checkoutHealth.shipping_selection_sessions)
+  const paymentSelectionSessions = num(checkoutHealth.payment_selection_sessions)
+  const paymentFailedSessions = num(checkoutHealth.payment_failed_sessions)
   const filled = {
     session_id: dataQualityTotal ? 1 - num(quality.missing_session_id_events) / dataQualityTotal : 0,
     visitor_id: dataQualityTotal ? 1 - num(quality.missing_visitor_id_events) / dataQualityTotal : 0,
@@ -939,13 +956,13 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
     },
     checkout: {
       session_health: {
-        checkout_sessions: conversion.checkout_sessions,
-        shipping_selection_sessions: num(paymentRows.length ? summary.checkout_start_sessions : 0),
-        payment_selection_sessions: num(paymentRows.length ? summary.checkout_start_sessions : 0),
+        checkout_sessions: checkoutSessions,
+        shipping_selection_sessions: shippingSelectionSessions,
+        payment_selection_sessions: paymentSelectionSessions,
         purchase_sessions: conversion.purchase_sessions,
-        payment_failed_sessions: num(summary.payment_failed_sessions),
-        shipping_selection_rate_pct: safePct(num(paymentRows.length ? summary.checkout_start_sessions : 0), conversion.checkout_sessions),
-        payment_selection_rate_pct: safePct(num(paymentRows.length ? summary.checkout_start_sessions : 0), conversion.checkout_sessions),
+        payment_failed_sessions: paymentFailedSessions,
+        shipping_selection_rate_pct: safePct(shippingSelectionSessions, checkoutSessions),
+        payment_selection_rate_pct: safePct(paymentSelectionSessions, checkoutSessions),
       },
       top_shipping_methods: shippingRows.map((row) => ({ shipping_method: str(row.method_value), count: num(row.events) })),
       top_payment_methods: paymentRows.map((row) => ({ payment_method: str(row.method_value), count: num(row.events) })),

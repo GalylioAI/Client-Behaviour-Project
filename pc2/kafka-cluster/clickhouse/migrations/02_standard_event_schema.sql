@@ -39,6 +39,7 @@ SETTINGS
 
 ALTER TABLE ecommerce_events
     ADD COLUMN IF NOT EXISTS schema_version LowCardinality(String) DEFAULT '1.0' AFTER event_timestamp,
+    ADD COLUMN IF NOT EXISTS event_id String DEFAULT JSONExtractString(raw_event, 'event_id') AFTER schema_version,
     ADD COLUMN IF NOT EXISTS site_id LowCardinality(String) DEFAULT 'unknown' AFTER event_type,
     ADD COLUMN IF NOT EXISTS platform LowCardinality(String) DEFAULT 'unknown' AFTER site_id,
     ADD COLUMN IF NOT EXISTS properties String DEFAULT '{}' AFTER is_unload,
@@ -50,6 +51,7 @@ SELECT
     coalesce(parseDateTime64BestEffortOrNull(kafka_ecommerce_events.received_at, 3, 'UTC'), now64(3))                      AS received_at,
     coalesce(parseDateTime64BestEffortOrNull(coalesce(timestamp, kafka_ecommerce_events.received_at), 3, 'UTC'), now64(3)) AS event_timestamp,
     coalesce(schema_version, '1.0')                                  AS schema_version,
+    coalesce(nullIf(event_id, ''), JSONExtractString(coalesce(raw_event, '{}'), 'event_id'), '') AS event_id,
     coalesce(event_name, event_type, 'unknown')                      AS event_name,
     coalesce(event_type, 'custom')                                   AS event_type,
     coalesce(site_id, 'unknown')                                     AS site_id,

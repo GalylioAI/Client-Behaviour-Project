@@ -11,5 +11,6 @@ COPY main.py .
 
 EXPOSE 8080
 
-# Run with uvicorn — 2 workers is plenty for a bridge on a local network
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "2", "--log-level", "info"]
+# Keep one worker until metrics are moved to shared storage; in-process counters
+# become misleading when uvicorn forks multiple workers.
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1", "--log-level", "info"]
