@@ -21,6 +21,7 @@ import {
   LineChart as LineChartIcon,
   LogOut,
   PackageSearch,
+  Plus,
   Radio,
   RefreshCw,
   Search,
@@ -29,6 +30,8 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  TrendingDown,
+  TrendingUp,
   Users,
   Workflow,
 } from "lucide-react"
@@ -79,8 +82,8 @@ type DashboardView =
 
 const viewMeta: Record<DashboardView, { title: string; description: string }> = {
   overview: {
-    title: "Live Behaviour Intelligence Dashboard",
-    description: "A focused operating view for real-time ecommerce behavior, conversion leaks, product engagement, tenant health, and the AI/ML layer we will grow next.",
+    title: "Business Performance Cockpit",
+    description: "A compact owner view showing how the store is performing, what changed against the normal daily average, and where to act next.",
   },
   live: {
     title: "Live Events",
@@ -224,6 +227,154 @@ function downloadReportCsv(insights: BehaviorInsights) {
   link.click()
   document.body.removeChild(link)
   URL.revokeObjectURL(href)
+}
+
+type PulseTone = "positive" | "negative" | "neutral"
+
+type BusinessPulseMetric = {
+  id: string
+  label: string
+  sublabel: string
+  value: string
+  deltaPct: number
+  baselineLabel: string
+  positiveWhenUp: boolean
+  series: number[]
+  baseline: number
+  href: string
+}
+
+function avg(values: number[]) {
+  const valid = values.filter((value) => Number.isFinite(value))
+  return valid.length ? valid.reduce((sum, value) => sum + value, 0) / valid.length : 0
+}
+
+function safeRate(numerator: number, denominator: number) {
+  return denominator ? (numerator / denominator) * 100 : 0
+}
+
+function pctChange(current: number, baseline: number) {
+  if (!baseline) return current ? 100 : 0
+  return ((current - baseline) / baseline) * 100
+}
+
+function trendTone(deltaPct: number, positiveWhenUp: boolean): PulseTone {
+  if (Math.abs(deltaPct) < 0.5) return "neutral"
+  const isUp = deltaPct > 0
+  return isUp === positiveWhenUp ? "positive" : "negative"
+}
+
+function formatSignedPct(value: number) {
+  const sign = value > 0 ? "+" : ""
+  return `${sign}${value.toFixed(1)}%`
+}
+
+function latestDayLabel(dateValue: string | undefined) {
+  if (!dateValue) return "Latest day"
+  const date = new Date(dateValue)
+  if (Number.isNaN(date.getTime())) return "Latest day"
+  return new Intl.DateTimeFormat("en", { month: "short", day: "2-digit" }).format(date)
+}
+
+function buildPulseMetrics(insights: BehaviorInsights): BusinessPulseMetric[] {
+  const siteId = insights.operations.site.site_id || "tdiscount"
+  const trends = insights.daily_trends
+  const latest = trends.at(-1)
+  const previous = trends.slice(0, -1)
+  const baselineRows = previous.length ? previous : trends
+  const period = latestDayLabel(latest?.date)
+  const baselineLabel = previous.length ? "vs previous daily average" : "vs available daily average"
+
+  const visitors = latest?.visitors ?? insights.business_overview.reach.visitors
+  const sessions = latest?.sessions ?? insights.business_overview.reach.sessions
+  const carts = latest?.add_to_cart ?? insights.business_overview.conversion.cart_sessions
+  const purchases = latest?.purchases ?? insights.business_overview.conversion.purchase_sessions
+  const conversionRate = safeRate(purchases, sessions)
+  const cartIntentRate = safeRate(carts, sessions)
+  const abandonmentRate = safeRate(Math.max(carts - purchases, 0), carts)
+
+  const avgVisitors = avg(baselineRows.map((row) => row.visitors))
+  const avgSessions = avg(baselineRows.map((row) => row.sessions))
+  const avgCarts = avg(baselineRows.map((row) => row.add_to_cart))
+  const avgPurchases = avg(baselineRows.map((row) => row.purchases))
+  const avgConversionRate = safeRate(avgPurchases, avgSessions)
+  const avgCartIntentRate = safeRate(avgCarts, avgSessions)
+  const avgAbandonmentRate = safeRate(Math.max(avgCarts - avgPurchases, 0), avgCarts)
+
+  return [
+    {
+      id: "visitors",
+      label: "Visitors",
+      sublabel: period,
+      value: fmtInt(visitors),
+      deltaPct: pctChange(visitors, avgVisitors),
+      baselineLabel,
+      positiveWhenUp: true,
+      series: trends.map((row) => row.visitors),
+      baseline: avgVisitors,
+      href: `/app?site_id=${encodeURIComponent(siteId)}&view=audience`,
+    },
+    {
+      id: "sessions",
+      label: "Sessions",
+      sublabel: period,
+      value: fmtInt(sessions),
+      deltaPct: pctChange(sessions, avgSessions),
+      baselineLabel,
+      positiveWhenUp: true,
+      series: trends.map((row) => row.sessions),
+      baseline: avgSessions,
+      href: `/app?site_id=${encodeURIComponent(siteId)}&view=live`,
+    },
+    {
+      id: "purchases",
+      label: "Purchases",
+      sublabel: period,
+      value: fmtInt(purchases),
+      deltaPct: pctChange(purchases, avgPurchases),
+      baselineLabel,
+      positiveWhenUp: true,
+      series: trends.map((row) => row.purchases),
+      baseline: avgPurchases,
+      href: `/app?site_id=${encodeURIComponent(siteId)}&view=funnels`,
+    },
+    {
+      id: "conversion",
+      label: "Conversion Rate",
+      sublabel: "Purchase sessions",
+      value: fmtPct(conversionRate),
+      deltaPct: pctChange(conversionRate, avgConversionRate),
+      baselineLabel,
+      positiveWhenUp: true,
+      series: trends.map((row) => safeRate(row.purchases, row.sessions)),
+      baseline: avgConversionRate,
+      href: `/app?site_id=${encodeURIComponent(siteId)}&view=funnels`,
+    },
+    {
+      id: "cart-intent",
+      label: "Cart Intent",
+      sublabel: "Add-to-cart rate",
+      value: fmtPct(cartIntentRate),
+      deltaPct: pctChange(cartIntentRate, avgCartIntentRate),
+      baselineLabel,
+      positiveWhenUp: true,
+      series: trends.map((row) => safeRate(row.add_to_cart, row.sessions)),
+      baseline: avgCartIntentRate,
+      href: `/app?site_id=${encodeURIComponent(siteId)}&view=products`,
+    },
+    {
+      id: "cart-abandonment",
+      label: "Cart Abandonment",
+      sublabel: "Carts without purchase",
+      value: fmtPct(abandonmentRate),
+      deltaPct: pctChange(abandonmentRate, avgAbandonmentRate),
+      baselineLabel,
+      positiveWhenUp: false,
+      series: trends.map((row) => safeRate(Math.max(row.add_to_cart - row.purchases, 0), row.add_to_cart)),
+      baseline: avgAbandonmentRate,
+      href: `/app?site_id=${encodeURIComponent(siteId)}&view=funnels`,
+    },
+  ]
 }
 
 function StatusDot({
@@ -437,6 +588,167 @@ function MetricCard({
       </div>
       <p className="mt-3 text-xs leading-5 text-slate-500">{helper}</p>
     </div>
+  )
+}
+
+function DeltaBadge({ metric }: { metric: BusinessPulseMetric }) {
+  const tone = trendTone(metric.deltaPct, metric.positiveWhenUp)
+  const isUp = metric.deltaPct > 0.5
+  const isDown = metric.deltaPct < -0.5
+  const Icon = isDown ? TrendingDown : TrendingUp
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold tabular-nums",
+        tone === "positive" && "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100",
+        tone === "negative" && "bg-red-50 text-red-700 ring-1 ring-red-100",
+        tone === "neutral" && "bg-slate-100 text-slate-600 ring-1 ring-slate-200"
+      )}
+    >
+      <Icon className={cn("h-3.5 w-3.5", !isUp && !isDown && "rotate-45")} />
+      {formatSignedPct(metric.deltaPct)}
+    </span>
+  )
+}
+
+function MiniSparkline({ metric }: { metric: BusinessPulseMetric }) {
+  const tone = trendTone(metric.deltaPct, metric.positiveWhenUp)
+  const stroke = tone === "positive" ? "#059669" : tone === "negative" ? "#DC2626" : "#64748B"
+  const fill = tone === "positive" ? "#D1FAE5" : tone === "negative" ? "#FEE2E2" : "#E2E8F0"
+  const values = metric.series.length ? metric.series : [0, metric.baseline, 0]
+  const rows = values.map((value, index) => ({
+    index,
+    value,
+    baseline: metric.baseline,
+  }))
+
+  return (
+    <div className="h-12 min-w-[110px]">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={rows} margin={{ left: 2, right: 2, top: 4, bottom: 4 }}>
+          <defs>
+            <linearGradient id={`pulse-${metric.id}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={fill} stopOpacity={0.9} />
+              <stop offset="95%" stopColor={fill} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <Line type="monotone" dataKey="baseline" stroke={stroke} strokeDasharray="4 4" strokeWidth={1.2} dot={false} />
+          <Area type="monotone" dataKey="value" stroke={stroke} fill={`url(#pulse-${metric.id})`} strokeWidth={1.8} dot={false} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+function BusinessPulseRow({ metric }: { metric: BusinessPulseMetric }) {
+  const tone = trendTone(metric.deltaPct, metric.positiveWhenUp)
+  return (
+    <Link
+      href={metric.href}
+      className={cn(
+        "group grid min-h-[76px] grid-cols-[minmax(0,1fr)_120px_auto] items-center gap-4 rounded-lg border bg-white px-4 py-3 shadow-[0_1px_1px_rgba(15,23,42,0.03)] transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(15,23,42,0.08)]",
+        tone === "positive" && "border-emerald-100 hover:border-emerald-200",
+        tone === "negative" && "border-red-100 hover:border-red-200",
+        tone === "neutral" && "border-slate-100 hover:border-blue-100"
+      )}
+    >
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-sm font-semibold text-slate-950">{metric.label}</span>
+          {tone === "positive" ? <TrendingUp className="h-4 w-4 text-emerald-600" /> : tone === "negative" ? <TrendingDown className="h-4 w-4 text-red-600" /> : null}
+        </div>
+        <div className="mt-1 truncate text-xs text-slate-500">{metric.sublabel} · {metric.baselineLabel}</div>
+      </div>
+      <div className="hidden sm:block">
+        <MiniSparkline metric={metric} />
+      </div>
+      <div className="flex items-center gap-3 justify-self-end">
+        <div className="text-right">
+          <DeltaBadge metric={metric} />
+          <div className="mt-1 text-xl font-semibold tabular-nums text-slate-950">{metric.value}</div>
+        </div>
+        <span className="grid h-8 w-8 place-items-center rounded-full border border-slate-200 text-slate-500 transition group-hover:border-blue-200 group-hover:text-blue-600">
+          <Plus className="h-4 w-4" />
+        </span>
+      </div>
+    </Link>
+  )
+}
+
+function BusinessPulsePanel({ insights }: { insights: BehaviorInsights }) {
+  const metrics = buildPulseMetrics(insights)
+  return (
+    <Surface
+      title="Business Pulse"
+      description="Current store performance compared with the normal daily average. Open any row for the full panel."
+      action={<Badge variant="outline" className="border-blue-100 bg-blue-50 text-blue-700 hover:bg-blue-50">Stock-style movement</Badge>}
+      className="bg-gradient-to-br from-white to-blue-50/40"
+    >
+      <div className="grid gap-3 xl:grid-cols-2">
+        {metrics.map((metric) => (
+          <BusinessPulseRow key={metric.id} metric={metric} />
+        ))}
+      </div>
+    </Surface>
+  )
+}
+
+function ExecutiveShortcutGrid({ insights }: { insights: BehaviorInsights }) {
+  const siteId = insights.operations.site.site_id || "tdiscount"
+  const topProduct = buildTopProducts(insights)[0]
+  const topReferrer = buildTopReferrers(insights)[0]
+  const dropoff = insights.commercial_funnel.largest_dropoff
+  const shortcuts = [
+    {
+      title: "Biggest Revenue Leak",
+      value: `${dropoff.dropoff_pct_points.toFixed(1)} pts`,
+      helper: `${cleanLabel(dropoff.from_stage)} to ${cleanLabel(dropoff.to_stage)}`,
+      href: `/app?site_id=${encodeURIComponent(siteId)}&view=funnels`,
+      icon: BarChart3,
+      tone: "red",
+    },
+    {
+      title: "Product Opportunity",
+      value: topProduct ? topProduct.label : "Waiting",
+      helper: topProduct ? topProduct.secondaryValue : "No product signal yet",
+      href: `/app?site_id=${encodeURIComponent(siteId)}&view=products`,
+      icon: PackageSearch,
+      tone: "blue",
+    },
+    {
+      title: "Best Traffic Signal",
+      value: topReferrer ? topReferrer.label : "Direct",
+      helper: topReferrer ? topReferrer.secondaryValue : "No referrer signal yet",
+      href: `/app?site_id=${encodeURIComponent(siteId)}&view=audience`,
+      icon: Globe2,
+      tone: "teal",
+    },
+  ] as const
+
+  const toneClasses = {
+    red: "bg-red-50 text-red-700 border-red-100",
+    blue: "bg-blue-50 text-blue-700 border-blue-100",
+    teal: "bg-teal-50 text-teal-700 border-teal-100",
+  }
+
+  return (
+    <section className="grid gap-4 xl:grid-cols-3">
+      {shortcuts.map((item) => (
+        <Link key={item.title} href={item.href} className="rounded-lg border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(15,23,42,0.08)]">
+          <div className="flex items-start justify-between gap-3">
+            <div className={cn("grid h-9 w-9 place-items-center rounded-md border", toneClasses[item.tone])}>
+              <item.icon className="h-4 w-4" />
+            </div>
+            <span className="grid h-8 w-8 place-items-center rounded-full border border-slate-200 text-slate-500">
+              <Plus className="h-4 w-4" />
+            </span>
+          </div>
+          <div className="mt-4 text-xs font-medium text-slate-500">{item.title}</div>
+          <div className="mt-2 line-clamp-1 text-xl font-semibold text-slate-950">{item.value}</div>
+          <div className="mt-2 line-clamp-2 text-sm leading-5 text-slate-500">{item.helper}</div>
+        </Link>
+      ))}
+    </section>
   )
 }
 
@@ -1252,35 +1564,23 @@ function ActiveViewContent({
     default:
       return (
         <>
-          <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
-            {metricCards.map((card) => (
-              <MetricCard key={card.label} {...card} />
-            ))}
-          </section>
+          <BusinessPulsePanel insights={insights} />
+
+          <ExecutiveShortcutGrid insights={insights} />
 
           <section className="grid gap-5 xl:grid-cols-3">
-            <LiveEventStream insights={insights} />
-            <FunnelCard insights={insights} />
-          </section>
-
-          <section className="grid gap-5 xl:grid-cols-2">
-            <TrafficCard insights={insights} />
+            <TrendsCard insights={insights} />
             <AIAlertCard insights={insights} />
           </section>
 
           <section className="grid gap-5 xl:grid-cols-2">
+            <FunnelCard insights={insights} />
             <ProductEngagementCard insights={insights} />
-            <SessionQualityCard insights={insights} />
-          </section>
-
-          <section className="grid gap-5 xl:grid-cols-3">
-            <TrendsCard insights={insights} />
-            <EventMixCard insights={insights} />
           </section>
 
           <section className="grid gap-5 xl:grid-cols-2">
-            <PipelineHealthCard insights={insights} />
-            <ModelReadinessCard insights={insights} />
+            <TrafficCard insights={insights} />
+            <SessionQualityCard insights={insights} />
           </section>
 
           <section className="grid gap-4 rounded-lg border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.05)] md:grid-cols-3">
