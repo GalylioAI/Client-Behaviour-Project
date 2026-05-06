@@ -2,6 +2,8 @@
  * Cart Tracker
  */
 const BehaviourTrackerCart = {
+    recentAddToCart: {},
+
     init: function () {
         this.trackAddToCart();
         this.trackCartVisuals();
@@ -20,10 +22,39 @@ const BehaviourTrackerCart = {
         document.body.addEventListener('click', (e) => {
             const btn = e.target.closest('.add-to-cart');
             if (btn) {
-                // We might not have full product info here immediately, 
-                // but we can track the intent.
-                // Ideally we rely on the 'updateCart' event from PrestaShop
+                this.trackAddToCartButton(btn);
             }
+        });
+    },
+
+    trackAddToCartButton: function (button) {
+        if (typeof bt_config !== 'undefined' && bt_config.BT_EVENT_CART_UPDATE == '0') return;
+
+        const form = button.closest('form');
+        const productId = button.getAttribute('data-id-product') ||
+            button.getAttribute('data-product-id') ||
+            form?.querySelector('[name="id_product"]')?.value ||
+            form?.querySelector('[name="id_product_attribute"]')?.value ||
+            '';
+        const productName = button.getAttribute('data-product-name') ||
+            document.querySelector('h1, .h1, .product-title')?.innerText ||
+            button.closest('.product-miniature')?.querySelector('.product-title, h2, h3')?.innerText ||
+            '';
+        const quantity = form?.querySelector('[name="qty"], [name="quantity_wanted"]')?.value || 1;
+
+        if (this.isDuplicateAddToCart(productId || productName || 'unknown')) {
+            return;
+        }
+
+        this.sendData({
+            event: 'add_to_cart',
+            event_type: 'SHOPPING CART EVENTS',
+            timestamp: new Date().toISOString(),
+            session_id: BehaviourTrackerSession.getOrCreateSessionId(),
+            product_id: productId,
+            product_name: productName,
+            quantity_added: parseInt(quantity, 10) || 1,
+            source: document.body.id === 'product' ? 'product_page' : 'product_list'
         });
     },
 
@@ -52,9 +83,25 @@ const BehaviourTrackerCart = {
                     data.event = 'remove_from_cart';
                 }
 
+                const productId = event.reason.idProduct || event.reason.id_product || event.reason.idProductAttribute || '';
+                if (data.event === 'add_to_cart' && this.isDuplicateAddToCart(productId || 'unknown')) {
+                    return;
+                }
+
+                if (productId) {
+                    data.product_id = productId;
+                }
+
                 this.sendData(data);
             }
         });
+    },
+
+    isDuplicateAddToCart: function (key) {
+        const now = Date.now();
+        const last = this.recentAddToCart[key] || 0;
+        this.recentAddToCart[key] = now;
+        return now - last < 1500;
     },
 
     /**
