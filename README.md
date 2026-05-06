@@ -84,6 +84,10 @@ Edit `modules/behaviourtracker/config.php` to set:
 - **SHIPPING_METHOD** - Shipping selection
 - **PAYMENT_METHOD** - Payment selection
 - **PURCHASE_COMPLETED** - Successful orders
+- **ORDER_STATUS_CHANGED** - Backend/admin order status transitions
+- **ORDER_CANCELLED** - Orders changed to cancelled status
+- **ORDER_REFUNDED** - Orders changed to refunded status
+- **ORDER_FAILED** - Orders changed to failed/error status
 - **PAYMENT_FAILED** - Failed transactions
 
 ### 5. User Account Events
@@ -257,4 +261,4 @@ Galylio
 
 ## Version
 
-1.0.0
+1.0.4

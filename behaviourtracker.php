@@ -34,7 +34,7 @@ class BehaviourTracker extends Module
     {
         $this->name = 'behaviourtracker';
         $this->tab = 'analytics_stats';
-        $this->version = '1.0.3';
+        $this->version = '1.0.4';
         $this->author = 'Galylio';
         $this->need_instance = 0;
         $this->ps_versions_compliancy = [
@@ -57,6 +57,8 @@ class BehaviourTracker extends Module
             $this->registerHook('header') &&
             $this->registerHook('displayHeader') &&
             $this->registerHook('actionValidateOrder') &&
+            $this->registerHook('actionOrderStatusUpdate') &&
+            $this->registerHook('actionOrderStatusPostUpdate') &&
             $this->installFixtures();
     }
 
@@ -92,6 +94,7 @@ class BehaviourTracker extends Module
         Configuration::updateValue('BT_EVENT_SHIPPING_METHOD', true);
         Configuration::updateValue('BT_EVENT_PAYMENT_METHOD', true);
         Configuration::updateValue('BT_EVENT_PURCHASE_COMPLETED', true);
+        Configuration::updateValue('BT_EVENT_ORDER_STATUS_CHANGED', true);
         Configuration::updateValue('BT_EVENT_PAYMENT_FAILED', true);
 
         // Account Events
@@ -149,6 +152,7 @@ class BehaviourTracker extends Module
         Configuration::deleteByName('BT_EVENT_SHIPPING_METHOD');
         Configuration::deleteByName('BT_EVENT_PAYMENT_METHOD');
         Configuration::deleteByName('BT_EVENT_PURCHASE_COMPLETED');
+        Configuration::deleteByName('BT_EVENT_ORDER_STATUS_CHANGED');
         Configuration::deleteByName('BT_EVENT_PAYMENT_FAILED');
         Configuration::deleteByName('BT_EVENT_REGISTRATION');
         Configuration::deleteByName('BT_EVENT_LOGIN');
@@ -543,6 +547,17 @@ class BehaviourTracker extends Module
                         ),
                         array(
                             'type' => 'switch',
+                            'label' => $this->l('Order Status Changed / Cancelled'),
+                            'name' => 'BT_EVENT_ORDER_STATUS_CHANGED',
+                            'is_bool' => true,
+                            'desc' => $this->l('Tracks admin/backend order changes such as cancelled, refunded, failed, or restored orders.'),
+                            'values' => array(
+                                array('id' => 'active_on', 'value' => true, 'label' => $this->l('Enabled')),
+                                array('id' => 'active_off', 'value' => false, 'label' => $this->l('Disabled'))
+                            ),
+                        ),
+                        array(
+                            'type' => 'switch',
                             'label' => $this->l('Payment Failed'),
                             'name' => 'BT_EVENT_PAYMENT_FAILED',
                             'is_bool' => true,
@@ -775,6 +790,7 @@ class BehaviourTracker extends Module
             'BT_EVENT_SHIPPING_METHOD' => Configuration::get('BT_EVENT_SHIPPING_METHOD', true),
             'BT_EVENT_PAYMENT_METHOD' => Configuration::get('BT_EVENT_PAYMENT_METHOD', true),
             'BT_EVENT_PURCHASE_COMPLETED' => Configuration::get('BT_EVENT_PURCHASE_COMPLETED', true),
+            'BT_EVENT_ORDER_STATUS_CHANGED' => Configuration::get('BT_EVENT_ORDER_STATUS_CHANGED', true),
             'BT_EVENT_PAYMENT_FAILED' => Configuration::get('BT_EVENT_PAYMENT_FAILED', true),
             'BT_EVENT_REGISTRATION' => Configuration::get('BT_EVENT_REGISTRATION', true),
             'BT_EVENT_LOGIN' => Configuration::get('BT_EVENT_LOGIN', true),
@@ -988,6 +1004,124 @@ class BehaviourTracker extends Module
         return (string) $orderStatus->name;
     }
 
+    public function hookActionOrderStatusUpdate($params)
+    {
+        $idOrder = isset($params['id_order']) ? (int) $params['id_order'] : 0;
+        if (!$idOrder) {
+            return;
+        }
+
+        $order = new Order($idOrder);
+        if (!Validate::isLoadedObject($order)) {
+            return;
+        }
+
+        $GLOBALS['BT_PREVIOUS_ORDER_STATUS_' . $idOrder] = array(
+            'id' => (int) $order->current_state,
+            'name' => $this->getOrderStatusNameById((int) $order->current_state),
+        );
+    }
+
+    public function hookActionOrderStatusPostUpdate($params)
+    {
+        if (!Configuration::get('BT_EVENT_ORDER_STATUS_CHANGED')) {
+            return;
+        }
+
+        $idOrder = isset($params['id_order']) ? (int) $params['id_order'] : 0;
+        if (!$idOrder) {
+            return;
+        }
+
+        $order = new Order($idOrder);
+        if (!Validate::isLoadedObject($order)) {
+            return;
+        }
+
+        $newOrderStatus = isset($params['newOrderStatus']) ? $params['newOrderStatus'] : null;
+        $newStatusId = ($newOrderStatus && isset($newOrderStatus->id)) ? (int) $newOrderStatus->id : (int) $order->current_state;
+        $newStatusName = $this->getOrderStatusName($newOrderStatus);
+        if (!$newStatusName) {
+            $newStatusName = $this->getOrderStatusNameById($newStatusId);
+        }
+
+        $previous = isset($GLOBALS['BT_PREVIOUS_ORDER_STATUS_' . $idOrder])
+            ? $GLOBALS['BT_PREVIOUS_ORDER_STATUS_' . $idOrder]
+            : array('id' => 0, 'name' => '');
+        unset($GLOBALS['BT_PREVIOUS_ORDER_STATUS_' . $idOrder]);
+
+        $customer = isset($order->id_customer) ? new Customer((int) $order->id_customer) : null;
+        $currency = isset($order->id_currency) ? new Currency((int) $order->id_currency) : null;
+        $employeeId = isset($this->context->employee->id) ? (int) $this->context->employee->id : 0;
+        $employeeEmail = isset($this->context->employee->email) ? (string) $this->context->employee->email : '';
+        $eventName = $this->eventNameForOrderState($newStatusId, $newStatusName);
+
+        $eventData = array(
+            'event_id' => 'prestashop_order_' . $idOrder . '_status_' . (int) $previous['id'] . '_to_' . $newStatusId . '_' . date('YmdHis'),
+            'event' => $eventName,
+            'event_type' => 'ORDER LIFECYCLE EVENTS',
+            'timestamp' => date('c'),
+            'customer_id' => isset($order->id_customer) ? (string) $order->id_customer : 'guest',
+            'customer_email' => ($customer && Validate::isLoadedObject($customer)) ? (string) $customer->email : '',
+            'order_id' => (string) $order->id,
+            'order_reference' => isset($order->reference) ? (string) $order->reference : '',
+            'order_status_previous' => isset($previous['name']) ? (string) $previous['name'] : '',
+            'order_status_previous_id' => isset($previous['id']) ? (int) $previous['id'] : 0,
+            'order_status' => $newStatusName,
+            'order_status_id' => $newStatusId,
+            'order_status_change_type' => $eventName,
+            'order_total' => isset($order->total_paid_tax_incl) ? (float) $order->total_paid_tax_incl : 0,
+            'order_subtotal' => isset($order->total_products_wt) ? (float) $order->total_products_wt : 0,
+            'tax_amount' => isset($order->total_paid_tax_incl, $order->total_paid_tax_excl)
+                ? (float) $order->total_paid_tax_incl - (float) $order->total_paid_tax_excl
+                : 0,
+            'shipping_cost' => isset($order->total_shipping_tax_incl) ? (float) $order->total_shipping_tax_incl : 0,
+            'discount_amount' => isset($order->total_discounts_tax_incl) ? (float) $order->total_discounts_tax_incl : 0,
+            'payment_method' => isset($order->payment) ? (string) $order->payment : '',
+            'shipping_method' => isset($order->carrier) ? (string) $order->carrier : '',
+            'currency' => ($currency && Validate::isLoadedObject($currency)) ? (string) $currency->iso_code : '',
+            'changed_by_employee_id' => $employeeId,
+            'changed_by_employee_email' => $employeeEmail,
+            'changed_in_admin' => $employeeId > 0,
+        );
+
+        $this->sendServerEvent($eventData);
+    }
+
+    protected function getOrderStatusNameById($statusId)
+    {
+        if (!$statusId) {
+            return '';
+        }
+
+        $orderState = new OrderState((int) $statusId);
+        if (!Validate::isLoadedObject($orderState)) {
+            return '';
+        }
+
+        return $this->getOrderStatusName($orderState);
+    }
+
+    protected function eventNameForOrderState($statusId, $statusName)
+    {
+        $cancelledId = (int) Configuration::get('PS_OS_CANCELED');
+        $refundedId = (int) Configuration::get('PS_OS_REFUND');
+        $failedId = (int) Configuration::get('PS_OS_ERROR');
+        $name = Tools::strtolower((string) $statusName);
+
+        if (($cancelledId && (int) $statusId === $cancelledId) || strpos($name, 'cancel') !== false || strpos($name, 'annul') !== false) {
+            return 'order_cancelled';
+        }
+        if (($refundedId && (int) $statusId === $refundedId) || strpos($name, 'refund') !== false || strpos($name, 'rembours') !== false) {
+            return 'order_refunded';
+        }
+        if (($failedId && (int) $statusId === $failedId) || strpos($name, 'error') !== false || strpos($name, 'failed') !== false || strpos($name, 'erreur') !== false) {
+            return 'order_failed';
+        }
+
+        return 'order_status_changed';
+    }
+
     protected function sendServerEvent($eventData)
     {
         $externalConfig = $this->getExternalConfig();
@@ -1100,7 +1234,7 @@ class BehaviourTracker extends Module
         if (strpos($value, 'cart') !== false) {
             return 'cart';
         }
-        if (strpos($value, 'checkout') !== false || strpos($value, 'purchase') !== false || strpos($value, 'payment') !== false) {
+        if (strpos($value, 'checkout') !== false || strpos($value, 'purchase') !== false || strpos($value, 'payment') !== false || strpos($value, 'order') !== false) {
             return 'checkout';
         }
         if (strpos($value, 'account') !== false || strpos($value, 'user') !== false) {
@@ -1113,7 +1247,7 @@ class BehaviourTracker extends Module
             return 'marketing';
         }
 
-        if (strpos($name, 'purchase') !== false || strpos($name, 'checkout') !== false || strpos($name, 'payment') !== false) {
+        if (strpos($name, 'purchase') !== false || strpos($name, 'checkout') !== false || strpos($name, 'payment') !== false || strpos($name, 'order_') !== false || strpos($name, 'cancel') !== false || strpos($name, 'refund') !== false) {
             return 'checkout';
         }
 
