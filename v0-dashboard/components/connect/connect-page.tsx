@@ -30,9 +30,29 @@ import { cn } from "@/lib/utils"
 const WP_SOURCE_URL = "https://github.com/GalylioAI/Client-Behaviour-Project/tree/wp"
 const PRESTA_SOURCE_URL = "https://github.com/GalylioAI/Client-Behaviour-Project/tree/Prestashop_module"
 
-function copyText(value: string) {
+async function copyText(value: string) {
   if (!value || value.startsWith("Shown once")) return
-  void navigator.clipboard?.writeText(value)
+
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(value)
+      return
+    }
+  } catch {
+    // Fall back below for non-HTTPS VM access.
+  }
+
+  const textarea = document.createElement("textarea")
+  textarea.value = value
+  textarea.setAttribute("readonly", "")
+  textarea.style.position = "fixed"
+  textarea.style.left = "-9999px"
+  textarea.style.top = "0"
+  document.body.appendChild(textarea)
+  textarea.select()
+  textarea.setSelectionRange(0, value.length)
+  document.execCommand("copy")
+  document.body.removeChild(textarea)
 }
 
 function fmtInt(value: number) {
@@ -195,12 +215,12 @@ function Metric({
 
 function CopyLine({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
   return (
-    <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 p-2">
+    <div className="flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 p-2">
       <div className="min-w-0 flex-1">
         <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
-        <code className={cn("block truncate text-xs font-medium", muted ? "text-slate-500" : "text-slate-800")}>{value}</code>
+        <code className={cn("block whitespace-pre-wrap break-all text-xs font-medium leading-5", muted ? "text-slate-500" : "text-slate-800")}>{value}</code>
       </div>
-      <Button type="button" variant="ghost" size="icon-sm" className="text-slate-500" onClick={() => copyText(value)} disabled={muted}>
+      <Button type="button" variant="ghost" size="icon-sm" className="shrink-0 text-slate-500" onClick={() => copyText(value)} disabled={muted} aria-label={`Copy ${label}`}>
         <Copy className="h-4 w-4" />
       </Button>
     </div>

@@ -52,9 +52,29 @@ function timeAgo(value: string | null) {
   return `${Math.round(hours / 24)}d ago`
 }
 
-function copyText(value: string) {
+async function copyText(value: string) {
   if (!value) return
-  void navigator.clipboard?.writeText(value)
+
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(value)
+      return
+    }
+  } catch {
+    // Fall back below for non-HTTPS VM access.
+  }
+
+  const textarea = document.createElement("textarea")
+  textarea.value = value
+  textarea.setAttribute("readonly", "")
+  textarea.style.position = "fixed"
+  textarea.style.left = "-9999px"
+  textarea.style.top = "0"
+  document.body.appendChild(textarea)
+  textarea.select()
+  textarea.setSelectionRange(0, value.length)
+  document.execCommand("copy")
+  document.body.removeChild(textarea)
 }
 
 function SetupSurface({
@@ -99,16 +119,16 @@ function Field({
 
 function CodeLine({ label, value, secret = false }: { label: string; value: string; secret?: boolean }) {
   return (
-    <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 p-2">
+    <div className="flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 p-2">
       <div className="min-w-0 flex-1">
         <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
-        <code className="block truncate text-xs font-medium text-slate-800">{value}</code>
+        <code className="block whitespace-pre-wrap break-all text-xs font-medium leading-5 text-slate-800">{value}</code>
       </div>
-      <Button type="button" variant="ghost" size="icon-sm" className="text-slate-500" onClick={() => copyText(value)}>
+      <Button type="button" variant="ghost" size="icon-sm" className="shrink-0 text-slate-500" onClick={() => copyText(value)} aria-label={`Copy ${label}`}>
         <Copy className="h-4 w-4" />
       </Button>
       {secret ? (
-        <Badge variant="outline" className="hidden border-amber-100 bg-amber-50 text-amber-700 sm:inline-flex">
+        <Badge variant="outline" className="mt-0.5 hidden border-amber-100 bg-amber-50 text-amber-700 sm:inline-flex">
           private
         </Badge>
       ) : null}

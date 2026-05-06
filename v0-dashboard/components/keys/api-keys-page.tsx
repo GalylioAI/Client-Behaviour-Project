@@ -28,8 +28,29 @@ const WP_SOURCE_URL = "https://github.com/GalylioAI/Client-Behaviour-Project/tre
 const PRESTA_SOURCE_URL = "https://github.com/GalylioAI/Client-Behaviour-Project/tree/Prestashop_module"
 const WEBHOOK_URL = "https://tracker.yatootunisie.tn/webhook"
 
-function copyText(value: string) {
-  void navigator.clipboard?.writeText(value)
+async function copyText(value: string) {
+  if (!value) return
+
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(value)
+      return
+    }
+  } catch {
+    // Fall back below for non-HTTPS VM access.
+  }
+
+  const textarea = document.createElement("textarea")
+  textarea.value = value
+  textarea.setAttribute("readonly", "")
+  textarea.style.position = "fixed"
+  textarea.style.left = "-9999px"
+  textarea.style.top = "0"
+  document.body.appendChild(textarea)
+  textarea.select()
+  textarea.setSelectionRange(0, value.length)
+  document.execCommand("copy")
+  document.body.removeChild(textarea)
 }
 
 function cleanLabel(value: string) {
@@ -77,12 +98,17 @@ function Surface({
 
 function CopyLine({ label, value, secret }: { label: string; value: string; secret?: boolean }) {
   return (
-    <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 p-2">
+    <div className="flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 p-2">
       <div className="min-w-0 flex-1">
         <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
-        <code className="block truncate text-xs font-medium text-slate-800">{secret ? value.replace(/^(.{16}).+(.{8})$/, "$1...$2") : value}</code>
+        <code className="block whitespace-pre-wrap break-all text-xs font-medium leading-5 text-slate-800">{value}</code>
       </div>
-      <Button type="button" variant="ghost" size="icon-sm" className="text-slate-500" onClick={() => copyText(value)}>
+      {secret ? (
+        <Badge variant="outline" className="mt-0.5 hidden border-amber-100 bg-amber-50 text-amber-700 sm:inline-flex">
+          private
+        </Badge>
+      ) : null}
+      <Button type="button" variant="ghost" size="icon-sm" className="shrink-0 text-slate-500" onClick={() => copyText(value)} aria-label={`Copy ${label}`}>
         <Copy className="h-4 w-4" />
       </Button>
     </div>
@@ -304,7 +330,7 @@ export function ApiKeysPage({ data }: { data: ApiKeyManagementData }) {
             >
               <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
                 <div className="space-y-3">
-                  <CopyLine label={cleanLabel(rotatedKey.key_type)} value={rotatedKey.public_value} secret />
+                  <CopyLine label={cleanLabel(rotatedKey.key_type)} value={rotatedKey.public_value} secret={rotatedKey.key_type === "server_secret"} />
                   <CopyLine label="site_id" value={rotatedKey.site_id} />
                   <CopyLine label="webhook_url" value={WEBHOOK_URL} />
                 </div>
