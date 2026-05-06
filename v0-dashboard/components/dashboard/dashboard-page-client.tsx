@@ -204,6 +204,8 @@ function downloadReportCsv(insights: BehaviorInsights) {
     ["overview", "raw_events", insights.business_overview.reach.raw_events, ""],
     ["overview", "sessions", insights.business_overview.reach.sessions, ""],
     ["overview", "visitors", insights.business_overview.reach.visitors, ""],
+    ["overview", "revenue_tnd", insights.business_overview.sales.revenue_tnd, ""],
+    ["overview", "average_order_value_tnd", insights.business_overview.sales.average_order_value_tnd, ""],
     ["overview", "purchase_rate_pct", insights.business_overview.conversion.session_to_purchase_rate_pct, ""],
     ["overview", "checkout_conversion_pct", insights.business_overview.conversion.checkout_to_purchase_rate_pct, ""],
     ...insights.commercial_funnel.stages.map((stage) => ["funnel", stage.stage, stage.sessions, `${stage.pct_of_all_sessions}% of sessions`]),
@@ -230,6 +232,7 @@ function downloadReportCsv(insights: BehaviorInsights) {
 }
 
 type PulseTone = "positive" | "negative" | "neutral"
+type SalesRange = "daily" | "weekly" | "monthly"
 
 type BusinessPulseMetric = {
   id: string
@@ -243,6 +246,22 @@ type BusinessPulseMetric = {
   baseline: number
   href: string
 }
+
+type SalesBucket = {
+  key: string
+  label: string
+  sort: number
+  revenue: number
+  sessions: number
+  purchases: number
+  addToCart: number
+}
+
+const salesRanges: Array<{ id: SalesRange; label: string; buckets: number; compareLabel: string }> = [
+  { id: "daily", label: "Daily", buckets: 14, compareLabel: "previous 14 days" },
+  { id: "weekly", label: "Weekly", buckets: 8, compareLabel: "previous 8 weeks" },
+  { id: "monthly", label: "Monthly", buckets: 6, compareLabel: "previous 6 months" },
+]
 
 function avg(values: number[]) {
   const valid = values.filter((value) => Number.isFinite(value))
@@ -269,11 +288,127 @@ function formatSignedPct(value: number) {
   return `${sign}${value.toFixed(1)}%`
 }
 
+function fmtMoneyAmount(value: number) {
+  return `${(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} TND`
+}
+
 function latestDayLabel(dateValue: string | undefined) {
   if (!dateValue) return "Latest day"
   const date = new Date(dateValue)
   if (Number.isNaN(date.getTime())) return "Latest day"
   return new Intl.DateTimeFormat("en", { month: "short", day: "2-digit" }).format(date)
+}
+
+function getDateParts(dateValue: string) {
+  const date = new Date(`${dateValue}T00:00:00Z`)
+  if (Number.isNaN(date.getTime())) return null
+  return date
+}
+
+function monthLabel(date: Date) {
+  return new Intl.DateTimeFormat("en", { month: "short" }).format(date)
+}
+
+function dayLabel(date: Date) {
+  return new Intl.DateTimeFormat("en", { month: "short", day: "2-digit" }).format(date)
+}
+
+function salesBucketFor(dateValue: string, range: SalesRange) {
+  const date = getDateParts(dateValue)
+  if (!date) return null
+
+  if (range === "monthly") {
+    const monthStart = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1))
+    return {
+      key: `${monthStart.getUTCFullYear()}-${String(monthStart.getUTCMonth() + 1).padStart(2, "0")}`,
+      label: `${monthLabel(monthStart)} ${String(monthStart.getUTCFullYear()).slice(2)}`,
+      sort: monthStart.getTime(),
+    }
+  }
+
+  if (range === "weekly") {
+    const weekStart = new Date(date)
+    const weekday = (weekStart.getUTCDay() + 6) % 7
+    weekStart.setUTCDate(weekStart.getUTCDate() - weekday)
+    weekStart.setUTCHours(0, 0, 0, 0)
+    return {
+      key: weekStart.toISOString().slice(0, 10),
+      label: dayLabel(weekStart),
+      sort: weekStart.getTime(),
+    }
+  }
+
+  return {
+    key: date.toISOString().slice(0, 10),
+    label: dayLabel(date),
+    sort: date.getTime(),
+  }
+}
+
+function buildSalesBuckets(insights: BehaviorInsights, range: SalesRange) {
+  const rows = insights.sales_trends.length ? insights.sales_trends : insights.daily_trends
+  const buckets = new Map<string, SalesBucket>()
+
+  for (const row of rows) {
+    const bucket = salesBucketFor(row.date, range)
+    if (!bucket) continue
+    const current = buckets.get(bucket.key) || {
+      ...bucket,
+      revenue: 0,
+      sessions: 0,
+      purchases: 0,
+      addToCart: 0,
+    }
+    current.revenue += row.revenue
+    current.sessions += row.sessions
+    current.purchases += row.purchases
+    current.addToCart += row.add_to_cart
+    buckets.set(bucket.key, current)
+  }
+
+  return Array.from(buckets.values()).sort((a, b) => a.sort - b.sort)
+}
+
+function sumSales(rows: SalesBucket[]) {
+  return rows.reduce(
+    (total, row) => ({
+      revenue: total.revenue + row.revenue,
+      sessions: total.sessions + row.sessions,
+      purchases: total.purchases + row.purchases,
+      addToCart: total.addToCart + row.addToCart,
+    }),
+    { revenue: 0, sessions: 0, purchases: 0, addToCart: 0 }
+  )
+}
+
+function buildSalesView(insights: BehaviorInsights, range: SalesRange) {
+  const rangeConfig = salesRanges.find((item) => item.id === range) || salesRanges[0]
+  const buckets = buildSalesBuckets(insights, range)
+  const current = buckets.slice(-rangeConfig.buckets)
+  const previous = buckets.slice(-(rangeConfig.buckets * 2), -rangeConfig.buckets)
+  const currentTotals = sumSales(current)
+  const previousTotals = sumSales(previous)
+  const currentCr = safeRate(currentTotals.purchases, currentTotals.sessions)
+  const previousCr = safeRate(previousTotals.purchases, previousTotals.sessions)
+  const currentAov = currentTotals.purchases ? currentTotals.revenue / currentTotals.purchases : 0
+  const previousAov = previousTotals.purchases ? previousTotals.revenue / previousTotals.purchases : 0
+  const currentAbandonment = safeRate(Math.max(currentTotals.addToCart - currentTotals.purchases, 0), currentTotals.addToCart)
+  const previousAbandonment = safeRate(Math.max(previousTotals.addToCart - previousTotals.purchases, 0), previousTotals.addToCart)
+  const avgRevenue = avg(current.map((row) => row.revenue))
+
+  return {
+    rangeConfig,
+    points: current.map((row) => ({ ...row, average: avgRevenue })),
+    totals: currentTotals,
+    comparison: previousTotals,
+    revenueDelta: pctChange(currentTotals.revenue, previousTotals.revenue),
+    conversionRate: currentCr,
+    conversionDelta: pctChange(currentCr, previousCr),
+    averageOrderValue: currentAov,
+    averageOrderValueDelta: pctChange(currentAov, previousAov),
+    cartAbandonmentRate: currentAbandonment,
+    cartAbandonmentDelta: pctChange(currentAbandonment, previousAbandonment),
+  }
 }
 
 function buildPulseMetrics(insights: BehaviorInsights): BusinessPulseMetric[] {
@@ -637,6 +772,167 @@ function MiniSparkline({ metric }: { metric: BusinessPulseMetric }) {
         </AreaChart>
       </ResponsiveContainer>
     </div>
+  )
+}
+
+function MovementBadge({
+  delta,
+  positiveWhenUp = true,
+  compact = false,
+}: {
+  delta: number
+  positiveWhenUp?: boolean
+  compact?: boolean
+}) {
+  const tone = trendTone(delta, positiveWhenUp)
+  const isDown = delta < -0.5
+  const Icon = isDown ? TrendingDown : TrendingUp
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full font-semibold tabular-nums",
+        compact ? "px-2 py-1 text-xs" : "px-2.5 py-1.5 text-sm",
+        tone === "positive" && "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100",
+        tone === "negative" && "bg-red-50 text-red-700 ring-1 ring-red-100",
+        tone === "neutral" && "bg-slate-100 text-slate-600 ring-1 ring-slate-200"
+      )}
+    >
+      <Icon className={cn(compact ? "h-3.5 w-3.5" : "h-4 w-4", Math.abs(delta) < 0.5 && "rotate-45")} />
+      {formatSignedPct(delta)}
+    </span>
+  )
+}
+
+function SalesMetricCard({
+  title,
+  value,
+  delta,
+  helper,
+  positiveWhenUp = true,
+}: {
+  title: string
+  value: string
+  delta: number
+  helper: string
+  positiveWhenUp?: boolean
+}) {
+  const tone = trendTone(delta, positiveWhenUp)
+  return (
+    <div
+      className={cn(
+        "rounded-lg border bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)]",
+        tone === "positive" && "border-emerald-100",
+        tone === "negative" && "border-red-100",
+        tone === "neutral" && "border-slate-200"
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{title}</div>
+          <div className="mt-2 text-2xl font-semibold tabular-nums text-slate-950">{value}</div>
+        </div>
+        <MovementBadge delta={delta} positiveWhenUp={positiveWhenUp} compact />
+      </div>
+      <p className="mt-3 text-xs leading-5 text-slate-500">{helper}</p>
+    </div>
+  )
+}
+
+function SalesPerformanceSection({ insights }: { insights: BehaviorInsights }) {
+  const [range, setRange] = useState<SalesRange>("daily")
+  const sales = useMemo(() => buildSalesView(insights, range), [insights, range])
+  const hasRevenue = sales.totals.revenue > 0
+
+  return (
+    <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_330px]">
+      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Sales / Revenue</div>
+            <h2 className="mt-1 text-lg font-semibold text-slate-950">Confirmed Revenue</h2>
+          </div>
+          <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1">
+            {salesRanges.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setRange(item.id)}
+                className={cn(
+                  "rounded-full px-3 py-1.5 text-xs font-semibold transition",
+                  range === item.id ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-950"
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-wrap items-end gap-3">
+          <div className="text-4xl font-semibold tracking-tight text-slate-950 md:text-5xl">
+            {fmtMoneyAmount(sales.totals.revenue)}
+          </div>
+          <MovementBadge delta={sales.revenueDelta} />
+        </div>
+        <div className="mt-2 text-xs font-medium text-slate-500">
+          {hasRevenue ? `Compared with the ${sales.rangeConfig.compareLabel}` : "Waiting for purchase events with order totals"}
+        </div>
+
+        <div className="mt-6 h-[320px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={sales.points} margin={{ left: 4, right: 12, top: 16, bottom: 0 }}>
+              <defs>
+                <linearGradient id="salesRevenueFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#1769E8" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#1769E8" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke="#E2E8F0" vertical={false} />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#64748B", fontSize: 12 }} />
+              <YAxis
+                orientation="right"
+                tickLine={false}
+                axisLine={false}
+                tick={{ fill: "#64748B", fontSize: 12 }}
+                tickFormatter={(value) => `${Number(value).toLocaleString()} TND`}
+                width={78}
+              />
+              <Tooltip
+                formatter={(value, name) => [
+                  name === "revenue" ? fmtMoneyAmount(Number(value)) : fmtMoneyAmount(Number(value)),
+                  name === "revenue" ? "Revenue" : "Average",
+                ]}
+                labelFormatter={(label) => `Period: ${label}`}
+              />
+              <Line type="monotone" dataKey="average" stroke="#94A3B8" strokeDasharray="5 5" strokeWidth={1.4} dot={false} />
+              <Area type="monotone" dataKey="revenue" stroke="#1769E8" fill="url(#salesRevenueFill)" strokeWidth={3} dot={false} activeDot={{ r: 5 }} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <aside className="space-y-4">
+        <SalesMetricCard
+          title="Conversion Rate"
+          value={fmtPct(sales.conversionRate)}
+          delta={sales.conversionDelta}
+          helper="Purchase sessions divided by total sessions."
+        />
+        <SalesMetricCard
+          title="Average Order Value"
+          value={fmtMoneyAmount(sales.averageOrderValue)}
+          delta={sales.averageOrderValueDelta}
+          helper="Revenue divided by completed purchases."
+        />
+        <SalesMetricCard
+          title="Cart Abandonment"
+          value={fmtPct(sales.cartAbandonmentRate)}
+          delta={sales.cartAbandonmentDelta}
+          positiveWhenUp={false}
+          helper="Users who added to cart but left without buying."
+        />
+      </aside>
+    </section>
   )
 }
 
@@ -1564,6 +1860,8 @@ function ActiveViewContent({
     default:
       return (
         <>
+          <SalesPerformanceSection insights={insights} />
+
           <BusinessPulsePanel insights={insights} />
 
           <ExecutiveShortcutGrid insights={insights} />

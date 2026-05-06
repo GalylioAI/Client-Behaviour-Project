@@ -41,6 +41,10 @@ export interface BehaviorInsights {
       avg_observed_cart_items: number | null
       max_observed_cart_value_tnd: number | null
     }
+    sales: {
+      revenue_tnd: number
+      average_order_value_tnd: number | null
+    }
   }
   commercial_funnel: {
     stages: Array<{
@@ -141,6 +145,14 @@ export interface BehaviorInsights {
     visitors: number
     purchases: number
     add_to_cart: number
+    revenue: number
+  }>
+  sales_trends: Array<{
+    date: string
+    sessions: number
+    purchases: number
+    add_to_cart: number
+    revenue: number
   }>
   column_utilization: {
     note: string
@@ -236,6 +248,11 @@ function getLookbackDays() {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 7
 }
 
+function getSalesLookbackDays() {
+  const parsed = Number(process.env.DASHBOARD_SALES_LOOKBACK_DAYS || 180)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 180
+}
+
 function emptyInsights(siteId: string): BehaviorInsights {
   return {
     dataset: {
@@ -269,6 +286,10 @@ function emptyInsights(siteId: string): BehaviorInsights {
         median_observed_cart_value_tnd: null,
         avg_observed_cart_items: null,
         max_observed_cart_value_tnd: null,
+      },
+      sales: {
+        revenue_tnd: 0,
+        average_order_value_tnd: null,
       },
     },
     commercial_funnel: {
@@ -320,6 +341,7 @@ function emptyInsights(siteId: string): BehaviorInsights {
       registration_sources: [],
     },
     daily_trends: [],
+    sales_trends: [],
     column_utilization: {
       note: `No Layer 2 metrics are available for site_id=${siteId}. Trigger the Airflow Layer 2 DAG first.`,
       top_15_filled: {},
@@ -416,8 +438,10 @@ function referrerChannel(referrerUrl: string) {
 export async function loadInsights(siteIdOverride?: string): Promise<BehaviorInsights> {
   const siteId = getSiteId(siteIdOverride)
   const days = getLookbackDays()
+  const salesDays = getSalesLookbackDays()
   const quotedSite = sqlString(siteId)
   const dateFilter = `metric_date >= today() - ${days}`
+  const salesDateFilter = `metric_date >= today() - ${salesDays}`
   const sessionFilter = `session_start >= now() - INTERVAL ${days} DAY`
   const eventFilter = `event_timestamp >= now() - INTERVAL ${days} DAY`
 
@@ -430,6 +454,7 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
     deviceRows,
     referrerRows,
     trendRows,
+    salesTrendRows,
     eventRows,
     pageTypeRows,
     pathRows,
@@ -542,10 +567,24 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
         sum(sessions) AS sessions,
         sum(visitors) AS visitors,
         sum(purchase_sessions) AS purchases,
-        sum(add_to_cart_sessions) AS add_to_cart
+        sum(add_to_cart_sessions) AS add_to_cart,
+        sum(revenue) AS revenue
       FROM tracer.site_daily_metrics FINAL
       WHERE site_id = ${quotedSite}
         AND ${dateFilter}
+      GROUP BY metric_date
+      ORDER BY metric_date ASC
+    `),
+    clickhouseQuery(`
+      SELECT
+        metric_date AS date,
+        sum(sessions) AS sessions,
+        sum(purchase_sessions) AS purchases,
+        sum(add_to_cart_sessions) AS add_to_cart,
+        sum(revenue) AS revenue
+      FROM tracer.site_daily_metrics FINAL
+      WHERE site_id = ${quotedSite}
+        AND ${salesDateFilter}
       GROUP BY metric_date
       ORDER BY metric_date ASC
     `),
@@ -748,6 +787,7 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
   const quality = latest(qualityRows, {})
   const site = latest(siteRows, {})
   const sessions = num(summary.sessions)
+  const revenue = num(summary.revenue)
 
   if (!sessions && !num(dataset.rows)) {
     return emptyInsights(siteId)
@@ -855,6 +895,10 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
         avg_observed_cart_items: null,
         max_observed_cart_value_tnd: engagement.max_observed_cart_value_tnd == null ? null : num(engagement.max_observed_cart_value_tnd),
       },
+      sales: {
+        revenue_tnd: revenue,
+        average_order_value_tnd: conversion.purchase_sessions ? revenue / conversion.purchase_sessions : null,
+      },
     },
     commercial_funnel: buildFunnel(summary),
     audience: {
@@ -929,6 +973,14 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
       visitors: num(row.visitors),
       purchases: num(row.purchases),
       add_to_cart: num(row.add_to_cart),
+      revenue: num(row.revenue),
+    })),
+    sales_trends: salesTrendRows.map((row) => ({
+      date: str(row.date),
+      sessions: num(row.sessions),
+      purchases: num(row.purchases),
+      add_to_cart: num(row.add_to_cart),
+      revenue: num(row.revenue),
     })),
     column_utilization: {
       note: "Operational coverage from Layer 2 data quality checks.",
