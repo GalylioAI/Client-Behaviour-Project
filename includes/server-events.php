@@ -12,6 +12,7 @@ class BT_Server_Events
 {
     const PURCHASE_TRACKED_META = '_bt_purchase_completed_tracked_at';
     const STATUS_TRACKED_META = '_bt_order_status_events_tracked';
+    const PURCHASE_LOCK_PREFIX = 'bt_purchase_completed_lock_';
 
     public function __construct()
     {
@@ -63,6 +64,8 @@ class BT_Server_Events
             return;
         }
 
+        $this->lock_purchase_tracking($order_id);
+
         // Build items array
         $items = array();
         foreach ($order->get_items() as $item) {
@@ -83,6 +86,7 @@ class BT_Server_Events
         }
 
         $event_data = array(
+            'event_id' => 'woocommerce_order_' . (int) $order_id . '_purchase_completed',
             'event' => 'purchase_completed',
             'event_type' => 'CHECKOUT & PURCHASE EVENTS',
             'timestamp' => current_time('c'),
@@ -104,11 +108,15 @@ class BT_Server_Events
             'shipping_country' => $order->get_shipping_country(),
         );
 
-        if (bt_send_event($event_data)) {
+        $sent = bt_send_event($event_data);
+        if ($sent) {
             $order->update_meta_data(self::PURCHASE_TRACKED_META, current_time('mysql'));
             $order->save();
-        } elseif (get_option('bt_debug_mode', '0') === '1') {
-            error_log('[Behaviour Tracker] Failed to send purchase_completed for order ' . $order_id);
+        } else {
+            delete_transient($this->purchase_lock_key($order_id));
+            if (get_option('bt_debug_mode', '0') === '1') {
+                error_log('[Behaviour Tracker] Failed to send purchase_completed for order ' . $order_id);
+            }
         }
     }
 
@@ -121,8 +129,27 @@ class BT_Server_Events
             return true;
         }
 
+        if ($this->is_purchase_locked($order->get_id())) {
+            return true;
+        }
+
         $ignored_statuses = array('cancelled', 'failed', 'refunded', 'trash');
         return in_array($order->get_status(), $ignored_statuses, true);
+    }
+
+    private function purchase_lock_key($order_id)
+    {
+        return self::PURCHASE_LOCK_PREFIX . (int) $order_id;
+    }
+
+    private function is_purchase_locked($order_id)
+    {
+        return (bool) get_transient($this->purchase_lock_key($order_id));
+    }
+
+    private function lock_purchase_tracking($order_id)
+    {
+        set_transient($this->purchase_lock_key($order_id), '1', 10 * MINUTE_IN_SECONDS);
     }
 
     /**
