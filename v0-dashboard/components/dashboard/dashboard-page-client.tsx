@@ -211,7 +211,9 @@ function downloadReportCsv(insights: BehaviorInsights) {
     ...insights.commercial_funnel.stages.map((stage) => ["funnel", stage.stage, stage.sessions, `${stage.pct_of_all_sessions}% of sessions`]),
     ...insights.daily_trends.map((day) => ["daily_trend", day.date, day.events, `${day.sessions} sessions, ${day.purchases} purchases`]),
     ...Object.entries(insights.event_mix).map(([eventName, count]) => ["event_mix", eventName, count, "events"]),
+    ...insights.acquisition.acquisition_channels.map((channel) => ["acquisition_channel", channel.channel, channel.sessions, `${channel.purchases} purchases, ${channel.revenue} TND`]),
     ...insights.acquisition.top_referrers.map((referrer) => ["referrer", referrer.source, referrer.sessions, referrer.channel]),
+    ...insights.acquisition.campaign_sources.map((campaign) => ["campaign", campaign.source, campaign.sessions, `${campaign.medium || "campaign"}, ${campaign.channel}`]),
     ...insights.merchandising.top_products.map((product) => [
       "product",
       product.product_name || product.product_id,
@@ -1121,8 +1123,20 @@ function LiveEventStream({ insights }: { insights: BehaviorInsights }) {
 }
 
 function TrafficCard({ insights }: { insights: BehaviorInsights }) {
-  const [sourceMode, setSourceMode] = useState<"referrers" | "campaigns">("referrers")
+  const [sourceMode, setSourceMode] = useState<"channels" | "referrers" | "campaigns">("channels")
   const [audienceMode, setAudienceMode] = useState<"all" | "buyers">("all")
+  const channelRows = insights.acquisition.acquisition_channels.slice(0, 5).map((channel) => ({
+    id: channel.channel,
+    label: channel.channel,
+    value: channel.sessions,
+    secondaryValue: `${fmtPct(channel.share_pct)} of sessions · ${fmtInt(channel.purchases)} purchases · ${fmtMoney(channel.revenue)}`,
+  }))
+  const buyerChannelRows = insights.acquisition.buyer_acquisition_channels.slice(0, 5).map((channel) => ({
+    id: channel.channel,
+    label: channel.channel,
+    value: channel.purchases,
+    secondaryValue: `${fmtInt(channel.sessions)} buyer session${channel.sessions === 1 ? "" : "s"} · ${fmtMoney(channel.revenue)}`,
+  }))
   const referrers = buildTopReferrers(insights).slice(0, 5)
   const buyerReferrers = insights.acquisition.buyer_referrers.slice(0, 5).map((referrer) => ({
     id: referrer.referrer_url || "direct",
@@ -1134,17 +1148,19 @@ function TrafficCard({ insights }: { insights: BehaviorInsights }) {
     id: `${campaign.source}-${campaign.medium}-${campaign.campaign || "campaign"}`,
     label: campaign.source,
     value: campaign.sessions,
-    secondaryValue: `${campaign.medium || "campaign"}${campaign.campaign ? ` · ${campaign.campaign}` : ""} · ${fmtPct(campaign.share_pct)} of campaign sessions`,
+    secondaryValue: `${campaign.channel} · ${campaign.medium || "campaign"}${campaign.campaign ? ` · ${campaign.campaign}` : ""} · ${fmtPct(campaign.share_pct)} of campaign sessions`,
   }))
   const buyerCampaignRows = insights.acquisition.buyer_campaign_sources.slice(0, 5).map((campaign) => ({
     id: `${campaign.source}-${campaign.medium}-${campaign.campaign || "buyer-campaign"}`,
     label: campaign.source,
     value: campaign.purchases,
-    secondaryValue: `${campaign.medium || "campaign"}${campaign.campaign ? ` · ${campaign.campaign}` : ""} · ${fmtInt(campaign.sessions)} buyer session${campaign.sessions === 1 ? "" : "s"} · ${fmtMoney(campaign.revenue)}`,
+    secondaryValue: `${campaign.channel} · ${campaign.medium || "campaign"}${campaign.campaign ? ` · ${campaign.campaign}` : ""} · ${fmtInt(campaign.sessions)} buyer session${campaign.sessions === 1 ? "" : "s"} · ${fmtMoney(campaign.revenue)}`,
   }))
-  const rows = sourceMode === "campaigns"
-    ? audienceMode === "buyers" ? buyerCampaignRows : campaignRows
-    : audienceMode === "buyers" ? buyerReferrers : referrers
+  const rows = sourceMode === "channels"
+    ? audienceMode === "buyers" ? buyerChannelRows : channelRows
+    : sourceMode === "campaigns"
+      ? audienceMode === "buyers" ? buyerCampaignRows : campaignRows
+      : audienceMode === "buyers" ? buyerReferrers : referrers
   const chartRows = Array.from(
     rows.reduce((map, row) => {
       const current = map.get(row.label) || { label: row.label, sessions: 0, purchases: 0 }
@@ -1161,19 +1177,27 @@ function TrafficCard({ insights }: { insights: BehaviorInsights }) {
     .sort((a, b) => (audienceMode === "buyers" ? b.purchases - a.purchases : b.sessions - a.sessions))
     .slice(0, 5)
   const chartMetric = audienceMode === "buyers" ? "purchases" : "sessions"
-  const modeLabel = sourceMode === "campaigns" ? "campaign source" : "referrer"
+  const modeLabel = sourceMode === "channels" ? "channel" : sourceMode === "campaigns" ? "campaign source" : "referrer"
   const emptyLabel = sourceMode === "campaigns"
     ? audienceMode === "buyers" ? "No buyer campaign sources captured yet." : "No campaign sources captured yet."
-    : audienceMode === "buyers" ? "No buyer referral paths captured yet." : "No referral data captured yet."
+    : sourceMode === "channels"
+      ? audienceMode === "buyers" ? "No buyer acquisition channels captured yet." : "No acquisition channels captured yet."
+      : audienceMode === "buyers" ? "No buyer referral paths captured yet." : "No referral data captured yet."
+  const description = sourceMode === "channels"
+    ? "Business-friendly acquisition groups using campaign data first, then browser referrers."
+    : sourceMode === "campaigns"
+      ? "Campaign sources captured from first landing page UTM parameters."
+      : "Browser referrers captured from session referrer data."
 
   return (
     <Surface
       title="Traffic And Referrals"
-      description={sourceMode === "campaigns" ? "Campaign sources captured from first landing page UTM parameters." : "Browser referrers captured from session referrer data."}
+      description={description}
       action={
         <div className="flex flex-wrap gap-2">
           <div className="flex rounded-md border border-slate-200 bg-slate-50 p-1">
             {[
+              { id: "channels" as const, label: "Channels", icon: Layers3 },
               { id: "referrers" as const, label: "Referrers", icon: Globe2 },
               { id: "campaigns" as const, label: "Campaigns", icon: Send },
             ].map((item) => (

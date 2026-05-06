@@ -103,6 +103,7 @@ export interface BehaviorInsights {
       source: string
       medium: string
       campaign: string
+      channel: string
       sessions: number
       visitors: number
       purchases: number
@@ -113,6 +114,23 @@ export interface BehaviorInsights {
       source: string
       medium: string
       campaign: string
+      channel: string
+      sessions: number
+      visitors: number
+      purchases: number
+      revenue: number
+      share_pct: number
+    }>
+    acquisition_channels: Array<{
+      channel: string
+      sessions: number
+      visitors: number
+      purchases: number
+      revenue: number
+      share_pct: number
+    }>
+    buyer_acquisition_channels: Array<{
+      channel: string
       sessions: number
       visitors: number
       purchases: number
@@ -347,6 +365,8 @@ function emptyInsights(siteId: string): BehaviorInsights {
       buyer_referrers: [],
       campaign_sources: [],
       buyer_campaign_sources: [],
+      acquisition_channels: [],
+      buyer_acquisition_channels: [],
       channel_mix: [],
     },
     merchandising: { top_page_types: [], top_search_terms: [], top_products: [], top_paths: [] },
@@ -468,6 +488,139 @@ function referrerChannel(referrerUrl: string) {
   return "Referral"
 }
 
+function normalizeSource(value: string) {
+  return value.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0]
+}
+
+function isSearchSource(source: string) {
+  const normalized = normalizeSource(source)
+  return (
+    normalized.includes("google.") ||
+    normalized.includes("bing.") ||
+    normalized.includes("yahoo.") ||
+    normalized.includes("duckduckgo.") ||
+    normalized.includes("brave.") ||
+    normalized.includes("search.")
+  )
+}
+
+function isSocialSource(source: string) {
+  const normalized = normalizeSource(source)
+  return (
+    normalized.includes("facebook.") ||
+    normalized.includes("instagram.") ||
+    normalized.includes("tiktok.") ||
+    normalized.includes("linkedin.") ||
+    normalized.includes("twitter.") ||
+    normalized.includes("x.com") ||
+    normalized.includes("youtube.") ||
+    normalized.includes("pinterest.") ||
+    normalized.includes("snapchat.")
+  )
+}
+
+function hostnameFromValue(value: string) {
+  if (!value) return ""
+  try {
+    return new URL(value).hostname.replace(/^www\./, "").toLowerCase()
+  } catch {
+    try {
+      return new URL(`https://${value}`).hostname.replace(/^www\./, "").toLowerCase()
+    } catch {
+      return normalizeSource(value)
+    }
+  }
+}
+
+function internalDomainsFromSite(site: Record<string, unknown>) {
+  const values = [str(site.domain)]
+  const origins = Array.isArray(site.allowed_origins) ? site.allowed_origins : []
+  for (const origin of origins) values.push(str(origin))
+  return values
+    .map(hostnameFromValue)
+    .filter(Boolean)
+}
+
+function isInternalSource(source: string, internalDomains: string[]) {
+  const host = hostnameFromValue(source)
+  return internalDomains.some((domain) => host === domain || host.endsWith(`.${domain}`))
+}
+
+function campaignChannel(source: string, medium: string, options: {
+  referrerUrl?: string
+  internalDomains?: string[]
+  hasGoogleClick?: boolean
+  hasFacebookClick?: boolean
+  hasTiktokClick?: boolean
+  hasMicrosoftClick?: boolean
+} = {}) {
+  const cleanSource = source.trim()
+  const cleanMedium = medium.trim().toLowerCase().replace(/[-\s]+/g, "_")
+  const referrerUrl = options.referrerUrl || ""
+  const internalDomains = options.internalDomains || []
+  const paidMediums = ["cpc", "ppc", "paid", "paid_search", "sem", "display", "paid_display", "paid_social", "sponsored"]
+  const emailMediums = ["email", "newsletter", "mail"]
+  const affiliateMediums = ["affiliate", "aff", "partner", "partners"]
+  const socialMediums = ["social", "organic_social", "social_network", "social_media"]
+
+  if (emailMediums.some((item) => cleanMedium.includes(item)) || normalizeSource(cleanSource).includes("mailchimp") || normalizeSource(cleanSource).includes("klaviyo")) {
+    return "Email"
+  }
+  if (affiliateMediums.some((item) => cleanMedium.includes(item))) {
+    return "Affiliate / Partner"
+  }
+  if (options.hasGoogleClick || options.hasMicrosoftClick || (paidMediums.some((item) => cleanMedium.includes(item)) && isSearchSource(cleanSource))) {
+    return "Paid Search"
+  }
+  if (options.hasFacebookClick || options.hasTiktokClick || cleanMedium.includes("paid_social") || (paidMediums.some((item) => cleanMedium.includes(item)) && isSocialSource(cleanSource))) {
+    return "Paid Social"
+  }
+  if (paidMediums.some((item) => cleanMedium.includes(item))) {
+    return "Paid Campaign"
+  }
+  if (socialMediums.some((item) => cleanMedium.includes(item)) || isSocialSource(cleanSource)) {
+    return "Organic Social"
+  }
+  if (cleanSource && isInternalSource(cleanSource, internalDomains)) {
+    return "Internal"
+  }
+  if (cleanSource || cleanMedium) {
+    return "Campaign"
+  }
+  const fallback = referrerChannel(referrerUrl)
+  return fallback === "Social" ? "Organic Social" : fallback
+}
+
+function addChannelRow(
+  channels: Map<string, { sessions: number; visitors: number; purchases: number; revenue: number }>,
+  channel: string,
+  row: { sessions: number; visitors: number; purchases: number; revenue: number }
+) {
+  const current = channels.get(channel) || { sessions: 0, visitors: 0, purchases: 0, revenue: 0 }
+  current.sessions += row.sessions
+  current.visitors += row.visitors
+  current.purchases += row.purchases
+  current.revenue += row.revenue
+  channels.set(channel, current)
+}
+
+function sortedChannelRows(
+  channels: Map<string, { sessions: number; visitors: number; purchases: number; revenue: number }>,
+  total: number,
+  sortBy: "sessions" | "purchases"
+) {
+  return Array.from(channels.entries())
+    .map(([channel, row]) => ({
+      channel,
+      sessions: row.sessions,
+      visitors: row.visitors,
+      purchases: row.purchases,
+      revenue: row.revenue,
+      share_pct: safePct(row.sessions, total),
+    }))
+    .sort((a, b) => (sortBy === "purchases" ? b.purchases - a.purchases || b.revenue - a.revenue : b.sessions - a.sessions))
+}
+
 export async function loadInsights(siteIdOverride?: string): Promise<BehaviorInsights> {
   const siteId = getSiteId(siteIdOverride)
   const days = getLookbackDays()
@@ -489,6 +642,7 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
     buyerReferrerRows,
     campaignRows,
     buyerCampaignRows,
+    channelRows,
     trendRows,
     salesTrendRows,
     eventRows,
@@ -646,6 +800,42 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
       GROUP BY source, medium, campaign
       ORDER BY purchases DESC, revenue DESC, sessions DESC
       LIMIT 50
+    `),
+    clickhouseQuery(`
+      SELECT
+        referrer_url,
+        extractURLParameter(first_page_url, 'utm_source') AS source,
+        extractURLParameter(first_page_url, 'utm_medium') AS medium,
+        extractURLParameter(first_page_url, 'utm_campaign') AS campaign,
+        if(
+          extractURLParameter(first_page_url, 'gclid') != ''
+          OR extractURLParameter(first_page_url, 'gbraid') != ''
+          OR extractURLParameter(first_page_url, 'wbraid') != '',
+          1,
+          0
+        ) AS has_google_click,
+        if(extractURLParameter(first_page_url, 'fbclid') != '', 1, 0) AS has_facebook_click,
+        if(extractURLParameter(first_page_url, 'ttclid') != '', 1, 0) AS has_tiktok_click,
+        if(extractURLParameter(first_page_url, 'msclkid') != '', 1, 0) AS has_microsoft_click,
+        count() AS sessions,
+        uniqExact(visitor_id) AS visitors,
+        countIf(purchase_count > 0) AS buyer_sessions,
+        uniqExactIf(visitor_id, purchase_count > 0) AS buyer_visitors,
+        sum(purchase_count) AS purchases,
+        sum(revenue) AS revenue
+      FROM tracer.session_features FINAL
+      WHERE site_id = ${quotedSite}
+        AND ${sessionFilter}
+      GROUP BY
+        referrer_url,
+        source,
+        medium,
+        campaign,
+        has_google_click,
+        has_facebook_click,
+        has_tiktok_click,
+        has_microsoft_click
+      ORDER BY sessions DESC
     `),
     clickhouseQuery(`
       SELECT
@@ -885,6 +1075,7 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
   const quality = latest(qualityRows, {})
   const checkoutHealth = latest(checkoutHealthRows, {})
   const site = latest(siteRows, {})
+  const internalDomains = internalDomainsFromSite(site)
   const sessions = num(summary.sessions)
   const revenue = num(summary.revenue)
 
@@ -909,6 +1100,8 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
   const buyerReferrerTotal = buyerReferrerRows.reduce((sum, row) => sum + num(row.sessions), 0)
   const campaignTotal = campaignRows.reduce((sum, row) => sum + num(row.sessions), 0)
   const buyerCampaignTotal = buyerCampaignRows.reduce((sum, row) => sum + num(row.sessions), 0)
+  const channelTotal = channelRows.reduce((sum, row) => sum + num(row.sessions), 0)
+  const buyerChannelTotal = channelRows.reduce((sum, row) => sum + num(row.buyer_sessions), 0)
   const topReferrers = referrerRows
     .slice(0, 10)
     .map((row) => {
@@ -939,44 +1132,71 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
         share_pct: safePct(num(row.sessions), buyerReferrerTotal || conversion.purchase_sessions),
       }
     })
-  const campaignSources = campaignRows.slice(0, 10).map((row) => ({
-    source: str(row.source, "unknown"),
-    medium: str(row.medium, ""),
-    campaign: str(row.campaign, ""),
-    sessions: num(row.sessions),
-    visitors: num(row.visitors),
-    purchases: num(row.purchases),
-    revenue: num(row.revenue),
-    share_pct: safePct(num(row.sessions), campaignTotal || sessions),
-  }))
-  const buyerCampaignSources = buyerCampaignRows.slice(0, 10).map((row) => ({
-    source: str(row.source, "unknown"),
-    medium: str(row.medium, ""),
-    campaign: str(row.campaign, ""),
-    sessions: num(row.sessions),
-    visitors: num(row.visitors),
-    purchases: num(row.purchases),
-    revenue: num(row.revenue),
-    share_pct: safePct(num(row.sessions), buyerCampaignTotal || conversion.purchase_sessions),
-  }))
-  const channels = new Map<string, { sessions: number; purchases: number; revenue: number }>()
-  for (const row of referrerRows) {
-    const channel = referrerChannel(str(row.referrer_url))
-    const current = channels.get(channel) || { sessions: 0, purchases: 0, revenue: 0 }
-    current.sessions += num(row.sessions)
-    current.purchases += num(row.purchases)
-    current.revenue += num(row.revenue)
-    channels.set(channel, current)
+  const campaignSources = campaignRows.slice(0, 10).map((row) => {
+    const source = str(row.source, "unknown")
+    const medium = str(row.medium, "")
+    return {
+      source,
+      medium,
+      campaign: str(row.campaign, ""),
+      channel: campaignChannel(source, medium, { internalDomains }),
+      sessions: num(row.sessions),
+      visitors: num(row.visitors),
+      purchases: num(row.purchases),
+      revenue: num(row.revenue),
+      share_pct: safePct(num(row.sessions), campaignTotal || sessions),
+    }
+  })
+  const buyerCampaignSources = buyerCampaignRows.slice(0, 10).map((row) => {
+    const source = str(row.source, "unknown")
+    const medium = str(row.medium, "")
+    return {
+      source,
+      medium,
+      campaign: str(row.campaign, ""),
+      channel: campaignChannel(source, medium, { internalDomains }),
+      sessions: num(row.sessions),
+      visitors: num(row.visitors),
+      purchases: num(row.purchases),
+      revenue: num(row.revenue),
+      share_pct: safePct(num(row.sessions), buyerCampaignTotal || conversion.purchase_sessions),
+    }
+  })
+  const channels = new Map<string, { sessions: number; visitors: number; purchases: number; revenue: number }>()
+  const buyerChannels = new Map<string, { sessions: number; visitors: number; purchases: number; revenue: number }>()
+  for (const row of channelRows) {
+    const channel = campaignChannel(str(row.source), str(row.medium), {
+      referrerUrl: str(row.referrer_url),
+      internalDomains,
+      hasGoogleClick: num(row.has_google_click) > 0,
+      hasFacebookClick: num(row.has_facebook_click) > 0,
+      hasTiktokClick: num(row.has_tiktok_click) > 0,
+      hasMicrosoftClick: num(row.has_microsoft_click) > 0,
+    })
+    addChannelRow(channels, channel, {
+      sessions: num(row.sessions),
+      visitors: num(row.visitors),
+      purchases: num(row.purchases),
+      revenue: num(row.revenue),
+    })
+    if (num(row.buyer_sessions) > 0) {
+      addChannelRow(buyerChannels, channel, {
+        sessions: num(row.buyer_sessions),
+        visitors: num(row.buyer_visitors),
+        purchases: num(row.purchases),
+        revenue: num(row.revenue),
+      })
+    }
   }
-  const channelMix = Array.from(channels.entries())
-    .map(([channel, row]) => ({
-      channel,
-      sessions: row.sessions,
-      share_pct: safePct(row.sessions, referrerTotal || sessions),
-      purchases: row.purchases,
-      revenue: row.revenue,
-    }))
-    .sort((a, b) => b.sessions - a.sessions)
+  const acquisitionChannels = sortedChannelRows(channels, channelTotal || sessions, "sessions")
+  const buyerAcquisitionChannels = sortedChannelRows(buyerChannels, buyerChannelTotal || conversion.purchase_sessions, "purchases")
+  const channelMix = acquisitionChannels.map((row) => ({
+    channel: row.channel,
+    sessions: row.sessions,
+    share_pct: row.share_pct,
+    purchases: row.purchases,
+    revenue: row.revenue,
+  }))
   const eventMix = Object.fromEntries(eventRows.map((row) => [str(row.event_name, "unknown"), num(row.events)]))
   const dataQualityTotal = num(quality.total_events)
   const checkoutSessions = num(checkoutHealth.checkout_sessions) || conversion.checkout_sessions
@@ -1064,6 +1284,8 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
       buyer_referrers: buyerReferrers,
       campaign_sources: campaignSources,
       buyer_campaign_sources: buyerCampaignSources,
+      acquisition_channels: acquisitionChannels,
+      buyer_acquisition_channels: buyerAcquisitionChannels,
       channel_mix: channelMix,
     },
     merchandising: {
