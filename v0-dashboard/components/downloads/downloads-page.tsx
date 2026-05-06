@@ -21,12 +21,12 @@ const plugins = [
   {
     id: "wordpress",
     name: "WordPress / WooCommerce Tracker",
-    version: "1.0.2",
+    version: "1.0.3",
     platform: "WordPress",
-    fileName: "wordpress-behaviour-tracker-1.0.2.zip",
-    href: "/plugins/wordpress-behaviour-tracker-1.0.2.zip",
-    size: "37 KB",
-    sha256: "2dd6fd1f58f0b7ccb907c54a1cad0105b138d5fc13aa8feaa258ce6c59f7fce2",
+    fileName: "wordpress-behaviour-tracker-1.0.3.zip",
+    href: "/plugins/wordpress-behaviour-tracker-1.0.3.zip",
+    size: "40 KB",
+    sha256: "a1a22a32b7da6276858ad187079f16063d2121bb48535103baf90df69fab8914",
     sourceUrl: "https://github.com/GalylioAI/Client-Behaviour-Project/tree/wp",
     installArea: "WordPress admin -> Plugins -> Add New -> Upload Plugin",
     settingsArea: "Settings -> Behaviour Tracker",
@@ -162,7 +162,7 @@ export function DownloadsPage({ siteId }: { siteId?: string }) {
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline" className="border-blue-100 bg-blue-50 text-blue-700">
-                  Version 1.0.2
+                  WordPress 1.0.3 / PrestaShop 1.0.2
                 </Badge>
                 <Badge variant="outline" className="border-emerald-100 bg-emerald-50 text-emerald-700">
                   <Github className="h-3 w-3" />
