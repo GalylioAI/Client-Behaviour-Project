@@ -1121,15 +1121,62 @@ function LiveEventStream({ insights }: { insights: BehaviorInsights }) {
 }
 
 function TrafficCard({ insights }: { insights: BehaviorInsights }) {
+  const [mode, setMode] = useState<"all" | "buyers">("all")
   const referrers = buildTopReferrers(insights).slice(0, 5)
-  const channels = insights.acquisition.channel_mix.slice(0, 5)
+  const buyerReferrers = insights.acquisition.buyer_referrers.slice(0, 5).map((referrer) => ({
+    id: referrer.referrer_url || "direct",
+    label: referrer.source,
+    value: referrer.purchases,
+    secondaryValue: `${referrer.channel} · ${fmtInt(referrer.sessions)} buyer session${referrer.sessions === 1 ? "" : "s"} · ${fmtMoney(referrer.revenue)}`,
+  }))
+  const buyerChannels = Array.from(
+    insights.acquisition.buyer_referrers.reduce((map, referrer) => {
+      const current = map.get(referrer.channel) || { channel: referrer.channel, sessions: 0, purchases: 0, revenue: 0 }
+      current.sessions += referrer.sessions
+      current.purchases += referrer.purchases
+      current.revenue += referrer.revenue
+      map.set(referrer.channel, current)
+      return map
+    }, new Map<string, { channel: string; sessions: number; purchases: number; revenue: number }>())
+  )
+    .map(([, row]) => row)
+    .sort((a, b) => b.purchases - a.purchases)
+    .slice(0, 5)
+  const channels = mode === "buyers" ? buyerChannels : insights.acquisition.channel_mix.slice(0, 5)
+  const rows = mode === "buyers" ? buyerReferrers : referrers
+  const chartMetric = mode === "buyers" ? "purchases" : "sessions"
+
   return (
-    <Surface title="Traffic And Referrals" description="Channels and referrers captured from session referrer data.">
+    <Surface
+      title="Traffic And Referrals"
+      description={mode === "buyers" ? "Referrers used by sessions that completed a purchase." : "Channels and referrers captured from session referrer data."}
+      action={
+        <div className="flex rounded-md border border-slate-200 bg-slate-50 p-1">
+          {[
+            { id: "all" as const, label: "All traffic", icon: Users },
+            { id: "buyers" as const, label: "Buyer paths", icon: CircleDollarSign },
+          ].map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setMode(item.id)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium transition",
+                mode === item.id ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:text-slate-800"
+              )}
+            >
+              <item.icon className="h-3.5 w-3.5" />
+              {item.label}
+            </button>
+          ))}
+        </div>
+      }
+    >
       <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
         <div className="h-48">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie data={channels} dataKey="sessions" nameKey="channel" innerRadius={52} outerRadius={78} paddingAngle={3}>
+              <Pie data={channels} dataKey={chartMetric} nameKey="channel" innerRadius={52} outerRadius={78} paddingAngle={3}>
                 {channels.map((entry, index) => (
                   <Cell key={entry.channel} fill={chartColors[index % chartColors.length]} />
                 ))}
@@ -1139,16 +1186,19 @@ function TrafficCard({ insights }: { insights: BehaviorInsights }) {
           </ResponsiveContainer>
         </div>
         <div className="space-y-3">
-          {referrers.map((row, index) => (
+          {rows.map((row, index) => (
             <div key={row.id} className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium text-slate-800">{row.label}</div>
                 <div className="text-xs text-slate-500">{row.secondaryValue}</div>
               </div>
-              <div className="text-sm font-semibold tabular-nums text-slate-950">{fmtInt(row.value)}</div>
+              <div className="text-right text-sm font-semibold tabular-nums text-slate-950">
+                {fmtInt(row.value)}
+                <div className="text-[11px] font-medium text-slate-400">{mode === "buyers" ? "buys" : "sessions"}</div>
+              </div>
             </div>
           ))}
-          {!referrers.length ? <p className="text-sm text-slate-500">No referral data captured yet.</p> : null}
+          {!rows.length ? <p className="text-sm text-slate-500">{mode === "buyers" ? "No buyer referral paths captured yet." : "No referral data captured yet."}</p> : null}
         </div>
       </div>
     </Surface>

@@ -89,6 +89,16 @@ export interface BehaviorInsights {
       revenue: number
       share_pct: number
     }>
+    buyer_referrers: Array<{
+      referrer_url: string
+      source: string
+      channel: string
+      sessions: number
+      visitors: number
+      purchases: number
+      revenue: number
+      share_pct: number
+    }>
     channel_mix: Array<{
       channel: string
       sessions: number
@@ -314,6 +324,7 @@ function emptyInsights(siteId: string): BehaviorInsights {
     },
     acquisition: {
       top_referrers: [],
+      buyer_referrers: [],
       channel_mix: [],
     },
     merchandising: { top_page_types: [], top_search_terms: [], top_products: [], top_paths: [] },
@@ -453,6 +464,7 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
     loyaltyRows,
     deviceRows,
     referrerRows,
+    buyerReferrerRows,
     trendRows,
     salesTrendRows,
     eventRows,
@@ -560,6 +572,21 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
       GROUP BY referrer_url
       ORDER BY sessions DESC
       LIMIT 100
+    `),
+    clickhouseQuery(`
+      SELECT
+        referrer_url,
+        count() AS sessions,
+        uniqExact(visitor_id) AS visitors,
+        sum(purchase_count) AS purchases,
+        sum(revenue) AS revenue
+      FROM tracer.session_features FINAL
+      WHERE site_id = ${quotedSite}
+        AND ${sessionFilter}
+        AND purchase_count > 0
+      GROUP BY referrer_url
+      ORDER BY purchases DESC, revenue DESC
+      LIMIT 50
     `),
     clickhouseQuery(`
       SELECT
@@ -820,6 +847,7 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
   const returningSessions = Math.max(sessions - newSessions, 0)
   const deviceTotal = deviceRows.reduce((sum, row) => sum + num(row.sessions), 0)
   const referrerTotal = referrerRows.reduce((sum, row) => sum + num(row.sessions), 0)
+  const buyerReferrerTotal = buyerReferrerRows.reduce((sum, row) => sum + num(row.sessions), 0)
   const topReferrers = referrerRows
     .filter((row) => str(row.referrer_url).trim() !== "")
     .slice(0, 10)
@@ -834,6 +862,21 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
         purchases: num(row.purchases),
         revenue: num(row.revenue),
         share_pct: safePct(num(row.sessions), referrerTotal || sessions),
+      }
+    })
+  const buyerReferrers = buyerReferrerRows
+    .slice(0, 10)
+    .map((row) => {
+      const referrerUrl = str(row.referrer_url)
+      return {
+        referrer_url: referrerUrl,
+        source: referrerSource(referrerUrl),
+        channel: referrerChannel(referrerUrl),
+        sessions: num(row.sessions),
+        visitors: num(row.visitors),
+        purchases: num(row.purchases),
+        revenue: num(row.revenue),
+        share_pct: safePct(num(row.sessions), buyerReferrerTotal || conversion.purchase_sessions),
       }
     })
   const channels = new Map<string, { sessions: number; purchases: number; revenue: number }>()
@@ -938,6 +981,7 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
     },
     acquisition: {
       top_referrers: topReferrers,
+      buyer_referrers: buyerReferrers,
       channel_mix: channelMix,
     },
     merchandising: {
