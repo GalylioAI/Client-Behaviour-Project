@@ -513,6 +513,7 @@ ORDER_ID = (
     f"nullIf({json_text('transaction_id')}, ''), "
     f"nullIf({json_text('order_key')}, ''), '')"
 )
+ORDER_REVERSAL_EVENTS = "('order_cancelled', 'order_refunded', 'order_failed')"
 CART_VALUE = (
     f"greatest({json_number('cart_total_value')}, {json_number('cart_total_after')}, "
     f"{json_number('cart_total_before')})"
@@ -599,6 +600,26 @@ def refresh_session_features(client: ClickHouseHttpClient, site_id: str, start: 
     client.execute(
         f"""
         INSERT INTO session_features
+        WITH
+            reversed_orders AS
+            (
+                SELECT DISTINCT {ORDER_ID} AS reversed_order_key
+                FROM ecommerce_events
+                WHERE site_id = {quote(site_id)}
+                  AND event_name IN {ORDER_REVERSAL_EVENTS}
+                  AND event_timestamp < {dt_literal(end)}
+                  AND {ORDER_ID} != ''
+            ),
+            affected_orders AS
+            (
+                SELECT DISTINCT {ORDER_ID} AS affected_order_key
+                FROM ecommerce_events
+                WHERE site_id = {quote(site_id)}
+                  AND event_name IN {ORDER_REVERSAL_EVENTS}
+                  AND event_timestamp >= {dt_literal(start)}
+                  AND event_timestamp < {dt_literal(end)}
+                  AND {ORDER_ID} != ''
+            )
         SELECT
             site_id,
             coalesce(nullIf(anyLast(platform), ''), 'unknown') AS platform,
@@ -624,7 +645,7 @@ def refresh_session_features(client: ClickHouseHttpClient, site_id: str, start: 
             countIf(event_name = 'checkout_shipping_method_selected') AS shipping_selection_count,
             countIf(event_name = 'checkout_payment_method_selected') AS payment_selection_count,
             countIf(event_name = 'payment_failed') AS payment_failed_count,
-            uniqExactIf(purchase_key, event_name = 'purchase_completed' AND purchase_key != '') AS purchase_count,
+            uniqExactIf(purchase_key, valid_purchase_flag = 1 AND purchase_key != '') AS purchase_count,
             countIf(event_name = 'account_registration') AS registration_count,
             countIf(event_name = 'login') AS login_count,
             countIf(newsletter_flag) AS newsletter_opt_in_count,
@@ -633,11 +654,11 @@ def refresh_session_features(client: ClickHouseHttpClient, site_id: str, start: 
             uniqExactIf(product_key, event_name = 'add_to_cart' AND product_key != '') AS unique_products_added_cart,
             toFloat32(max(scroll_pct)) AS max_scroll_pct,
             max(cart_value) AS cart_value_max,
-            maxIf(order_total_value, event_name = 'purchase_completed') AS order_total_max,
+            maxIf(order_total_value, valid_purchase_flag = 1) AS order_total_max,
             if(
                 purchase_count <= 1,
                 order_total_max,
-                sumIf(order_total_value, event_name = 'purchase_completed')
+                sumIf(order_total_value, valid_purchase_flag = 1)
             ) AS revenue,
             coalesce(nullIf(argMax(device_key, event_timestamp), ''), 'unknown') AS device_type,
             coalesce(nullIf(argMin(ifNull(page_type, ''), event_timestamp), ''), 'unknown') AS first_page_type,
@@ -688,6 +709,13 @@ def refresh_session_features(client: ClickHouseHttpClient, site_id: str, start: 
                     {SCROLL_PCT} AS scroll_pct,
                     {DEVICE_TYPE} AS device_key,
                     {ORDER_ID} AS order_key,
+                    toUInt8(
+                        event_name = 'purchase_completed'
+                        AND (
+                            {ORDER_ID} = ''
+                            OR {ORDER_ID} NOT IN (SELECT reversed_order_key FROM reversed_orders)
+                        )
+                    ) AS valid_purchase_flag,
                     {IS_NEW_VISITOR} AS new_visitor_flag,
                     {NEWSLETTER_OPT_IN} AS newsletter_flag,
                     {REFERRER_URL} AS referrer_key
@@ -710,6 +738,10 @@ def refresh_session_features(client: ClickHouseHttpClient, site_id: str, start: 
                           event_name = 'purchase_completed'
                           AND event_timestamp >= {dt_literal(start)}
                           AND event_timestamp < {dt_literal(end)}
+                      )
+                      OR (
+                          {ORDER_ID} != ''
+                          AND {ORDER_ID} IN (SELECT affected_order_key FROM affected_orders)
                       )
                   )
             )
@@ -787,6 +819,15 @@ def refresh_site_hourly_metrics(client: ClickHouseHttpClient, site_id: str, star
         f"""
         INSERT INTO site_hourly_metrics
         WITH
+            reversed_orders AS
+            (
+                SELECT DISTINCT {ORDER_ID} AS reversed_order_key
+                FROM ecommerce_events
+                WHERE site_id = {quote(site_id)}
+                  AND event_name IN {ORDER_REVERSAL_EVENTS}
+                  AND event_timestamp < {dt_literal(end)}
+                  AND {ORDER_ID} != ''
+            ),
             raw AS
             (
                 SELECT
@@ -840,6 +881,10 @@ def refresh_site_hourly_metrics(client: ClickHouseHttpClient, site_id: str, star
                         FROM ecommerce_events
                         WHERE site_id = {quote(site_id)}
                           AND event_name = 'purchase_completed'
+                          AND (
+                              {ORDER_ID} = ''
+                              OR {ORDER_ID} NOT IN (SELECT reversed_order_key FROM reversed_orders)
+                          )
                     )
                     GROUP BY site_id, purchase_key
                     HAVING hour_start >= {dt_literal(start)}
@@ -944,10 +989,26 @@ def refresh_product_daily_metrics(client: ClickHouseHttpClient, site_id: str, st
         f"""
         INSERT INTO product_daily_metrics
         WITH
+            reversed_orders AS
+            (
+                SELECT DISTINCT {ORDER_ID} AS reversed_order_key
+                FROM ecommerce_events
+                WHERE site_id = {quote(site_id)}
+                  AND event_name IN {ORDER_REVERSAL_EVENTS}
+                  AND event_timestamp < {dt_literal(end)}
+                  AND {ORDER_ID} != ''
+            ),
             {PRODUCT_ID} AS product_key,
             {PRODUCT_NAME} AS product_name_key,
             {PRODUCT_CATEGORY} AS product_category_key,
-            {ORDER_TOTAL} AS order_total_value
+            {ORDER_TOTAL} AS order_total_value,
+            toUInt8(
+                event_name = 'purchase_completed'
+                AND (
+                    {ORDER_ID} = ''
+                    OR {ORDER_ID} NOT IN (SELECT reversed_order_key FROM reversed_orders)
+                )
+            ) AS valid_purchase_flag
         SELECT
             site_id,
             coalesce(nullIf(anyLast(platform), ''), 'unknown') AS platform,
@@ -960,10 +1021,10 @@ def refresh_product_daily_metrics(client: ClickHouseHttpClient, site_id: str, st
             countIf(event_name = 'click') AS clicks,
             countIf(event_name = 'add_to_cart') AS add_to_cart_events,
             countIf(event_name = 'remove_from_cart') AS remove_from_cart_events,
-            countIf(event_name = 'purchase_completed') AS purchase_events,
+            countIf(valid_purchase_flag = 1) AS purchase_events,
             uniqExact(session_id) AS sessions,
             uniqExact(visitor_id) AS visitors,
-            sumIf(order_total_value, event_name = 'purchase_completed') AS revenue,
+            sumIf(order_total_value, valid_purchase_flag = 1) AS revenue,
             round(if(views = 0, 0, 100 * add_to_cart_events / views), 2) AS view_to_cart_rate_pct,
             round(if(add_to_cart_events = 0, 0, 100 * purchase_events / add_to_cart_events), 2) AS cart_to_purchase_rate_pct,
             now64(3) AS updated_at
@@ -982,8 +1043,24 @@ def refresh_page_daily_metrics(client: ClickHouseHttpClient, site_id: str, start
         f"""
         INSERT INTO page_daily_metrics
         WITH
+            reversed_orders AS
+            (
+                SELECT DISTINCT {ORDER_ID} AS reversed_order_key
+                FROM ecommerce_events
+                WHERE site_id = {quote(site_id)}
+                  AND event_name IN {ORDER_REVERSAL_EVENTS}
+                  AND event_timestamp < {dt_literal(end)}
+                  AND {ORDER_ID} != ''
+            ),
             {PAGE_PATH} AS page_path_key,
-            {ORDER_TOTAL} AS order_total_value
+            {ORDER_TOTAL} AS order_total_value,
+            toUInt8(
+                event_name = 'purchase_completed'
+                AND (
+                    {ORDER_ID} = ''
+                    OR {ORDER_ID} NOT IN (SELECT reversed_order_key FROM reversed_orders)
+                )
+            ) AS valid_purchase_flag
         SELECT
             site_id,
             coalesce(nullIf(anyLast(platform), ''), 'unknown') AS platform,
@@ -994,8 +1071,8 @@ def refresh_page_daily_metrics(client: ClickHouseHttpClient, site_id: str, start
             countIf(event_name = 'page_view') AS page_views,
             uniqExact(session_id) AS sessions,
             uniqExact(visitor_id) AS visitors,
-            countIf(event_name = 'purchase_completed') AS purchases,
-            sumIf(order_total_value, event_name = 'purchase_completed') AS revenue,
+            countIf(valid_purchase_flag = 1) AS purchases,
+            sumIf(order_total_value, valid_purchase_flag = 1) AS revenue,
             now64(3) AS updated_at
         FROM ecommerce_events
         WHERE site_id = {quote(site_id)}
@@ -1046,9 +1123,25 @@ def refresh_checkout_method_daily_metrics(
         f"""
         INSERT INTO checkout_method_daily_metrics
         WITH
+            reversed_orders AS
+            (
+                SELECT DISTINCT {ORDER_ID} AS reversed_order_key
+                FROM ecommerce_events
+                WHERE site_id = {quote(site_id)}
+                  AND event_name IN {ORDER_REVERSAL_EVENTS}
+                  AND event_timestamp < {dt_literal(end)}
+                  AND {ORDER_ID} != ''
+            ),
             {payment_method} AS payment_method_key,
             {shipping_method} AS shipping_method_key,
-            {ORDER_TOTAL} AS order_total_value
+            {ORDER_TOTAL} AS order_total_value,
+            toUInt8(
+                event_name = 'purchase_completed'
+                AND (
+                    {ORDER_ID} = ''
+                    OR {ORDER_ID} NOT IN (SELECT reversed_order_key FROM reversed_orders)
+                )
+            ) AS valid_purchase_flag
         SELECT
             site_id,
             coalesce(nullIf(anyLast(platform), ''), 'unknown') AS platform,
@@ -1058,8 +1151,8 @@ def refresh_checkout_method_daily_metrics(
             count() AS events,
             uniqExact(session_id) AS sessions,
             uniqExact(visitor_id) AS visitors,
-            countIf(event_name = 'purchase_completed') AS purchases,
-            sumIf(order_total_value, event_name = 'purchase_completed') AS revenue,
+            countIf(valid_purchase_flag = 1) AS purchases,
+            sumIf(order_total_value, valid_purchase_flag = 1) AS revenue,
             now64(3) AS updated_at
         FROM ecommerce_events
         WHERE site_id = {quote(site_id)}
@@ -1077,8 +1170,8 @@ def refresh_checkout_method_daily_metrics(
             count() AS events,
             uniqExact(session_id) AS sessions,
             uniqExact(visitor_id) AS visitors,
-            countIf(event_name = 'purchase_completed') AS purchases,
-            sumIf(order_total_value, event_name = 'purchase_completed') AS revenue,
+            countIf(valid_purchase_flag = 1) AS purchases,
+            sumIf(order_total_value, valid_purchase_flag = 1) AS revenue,
             now64(3) AS updated_at
         FROM ecommerce_events
         WHERE site_id = {quote(site_id)}
@@ -1358,7 +1451,7 @@ def generate_site_insights(client: ClickHouseHttpClient, site_id: str, start: da
 
 
 def refresh_site(client: ClickHouseHttpClient, site_id: str, start: datetime, end: datetime) -> None:
-    daily_start = start_of_utc_day(start)
+    daily_start = start_of_utc_day(start - timedelta(days=7))
 
     refresh_session_features(client, site_id, start, end)
     refresh_visitor_features(client, site_id, start, end)

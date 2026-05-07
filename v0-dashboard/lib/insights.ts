@@ -1102,7 +1102,7 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
   const orderLifecycle = latest(orderLifecycleRows, {})
   const internalDomains = internalDomainsFromSite(site)
   const sessions = num(summary.sessions)
-  const revenue = num(summary.revenue)
+  const netRevenue = num(summary.revenue)
   const cancelledRevenue = num(orderLifecycle.cancelled_revenue)
 
   if (!sessions && !num(dataset.rows)) {
@@ -1282,13 +1282,13 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
         max_observed_cart_value_tnd: engagement.max_observed_cart_value_tnd == null ? null : num(engagement.max_observed_cart_value_tnd),
       },
       sales: {
-        revenue_tnd: revenue,
-        average_order_value_tnd: conversion.purchase_sessions ? revenue / conversion.purchase_sessions : null,
+        revenue_tnd: netRevenue,
+        average_order_value_tnd: conversion.purchase_sessions ? netRevenue / conversion.purchase_sessions : null,
         cancelled_orders: num(orderLifecycle.cancelled_orders),
         refunded_orders: num(orderLifecycle.refunded_orders),
         failed_orders: num(orderLifecycle.failed_orders),
         cancelled_revenue_tnd: cancelledRevenue,
-        net_revenue_tnd: Math.max(revenue - cancelledRevenue, 0),
+        net_revenue_tnd: netRevenue,
       },
     },
     commercial_funnel: buildFunnel(summary),
