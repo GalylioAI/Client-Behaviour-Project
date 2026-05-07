@@ -1412,9 +1412,9 @@ function TrendsCard({ insights }: { insights: BehaviorInsights }) {
             <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fill: "#64748B", fontSize: 12 }} />
             <YAxis tickLine={false} axisLine={false} tick={{ fill: "#64748B", fontSize: 12 }} width={42} />
             <Tooltip />
-            <Line type="monotone" dataKey="sessions" stroke="#1769E8" strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="carts" stroke="#14B8A6" strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="purchases" stroke="#F59E0B" strokeWidth={2} dot={false} />
+            <Line type="linear" dataKey="sessions" stroke="#1769E8" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 5 }} />
+            <Line type="linear" dataKey="carts" stroke="#14B8A6" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 5 }} />
+            <Line type="linear" dataKey="purchases" stroke="#F59E0B" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 5 }} />
           </LineChart>
         </ResponsiveContainer>
       </div>

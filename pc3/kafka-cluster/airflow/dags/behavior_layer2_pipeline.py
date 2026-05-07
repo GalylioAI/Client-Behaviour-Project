@@ -381,6 +381,10 @@ def parse_dt(value: str | None) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
+def start_of_utc_day(value: datetime) -> datetime:
+    return value.astimezone(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+
+
 def split_sql(sql: str) -> list[str]:
     statements: list[str] = []
     current: list[str] = []
@@ -1354,17 +1358,19 @@ def generate_site_insights(client: ClickHouseHttpClient, site_id: str, start: da
 
 
 def refresh_site(client: ClickHouseHttpClient, site_id: str, start: datetime, end: datetime) -> None:
+    daily_start = start_of_utc_day(start)
+
     refresh_session_features(client, site_id, start, end)
     refresh_visitor_features(client, site_id, start, end)
     refresh_site_hourly_metrics(client, site_id, start, end)
-    refresh_site_daily_metrics(client, site_id, start, end)
-    refresh_event_daily_metrics(client, site_id, start, end)
-    refresh_product_daily_metrics(client, site_id, start, end)
-    refresh_page_daily_metrics(client, site_id, start, end)
-    refresh_search_daily_metrics(client, site_id, start, end)
-    refresh_checkout_method_daily_metrics(client, site_id, start, end)
-    refresh_data_quality_daily(client, site_id, start, end)
-    generate_site_insights(client, site_id, start, end)
+    refresh_site_daily_metrics(client, site_id, daily_start, end)
+    refresh_event_daily_metrics(client, site_id, daily_start, end)
+    refresh_product_daily_metrics(client, site_id, daily_start, end)
+    refresh_page_daily_metrics(client, site_id, daily_start, end)
+    refresh_search_daily_metrics(client, site_id, daily_start, end)
+    refresh_checkout_method_daily_metrics(client, site_id, daily_start, end)
+    refresh_data_quality_daily(client, site_id, daily_start, end)
+    generate_site_insights(client, site_id, daily_start, end)
 
 
 def run_pipeline(
