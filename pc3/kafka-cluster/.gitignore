@@ -4,3 +4,4 @@ __pycache__/
 airflow/dags/__pycache__/
 airflow/logs/
 airflow/plugins/__pycache__/
+mlops/workspace/

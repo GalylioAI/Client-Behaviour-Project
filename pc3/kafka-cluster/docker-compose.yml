@@ -133,6 +133,11 @@ services:
       # Connections to external services — reachable over LAN
       AIRFLOW_CONN_CLICKHOUSE_DEFAULT: "http://admin:changeme@192.168.1.106:8123/tracer"
       AIRFLOW_CONN_KAFKA_DEFAULT: "kafka://192.168.1.105:9092,192.168.1.106:9092,192.168.1.109:9092"
+      MLOPS_MINIO_ENDPOINT: "http://192.168.1.106:9002"
+      MLFLOW_TRACKING_URI: "http://mlflow:5000"
+      MLFLOW_S3_ENDPOINT_URL: "http://192.168.1.106:9002"
+      AWS_ACCESS_KEY_ID: "${MINIO_ROOT_USER:-minioadmin}"
+      AWS_SECRET_ACCESS_KEY: "${MINIO_ROOT_PASSWORD:-minioadmin123}"
 
       AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "True"
     volumes:
@@ -152,12 +157,69 @@ services:
         airflow scheduler
       "
 
+  mlflow-db:
+    image: postgres:15
+    container_name: mlflow-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mlflow
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_DB: mlflow
+    volumes:
+      - mlflow-db-data:/var/lib/postgresql/data
+    networks:
+      - monitoring-net
+
+  mlflow:
+    build:
+      context: ./mlops/mlflow
+    container_name: mlflow
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      MLFLOW_BACKEND_STORE_URI: "postgresql://mlflow:changeme@mlflow-db:5432/mlflow"
+      MLFLOW_DEFAULT_ARTIFACT_ROOT: "s3://mlflow"
+      MLFLOW_S3_ENDPOINT_URL: "http://192.168.1.106:9002"
+      AWS_ACCESS_KEY_ID: "${MINIO_ROOT_USER:-minioadmin}"
+      AWS_SECRET_ACCESS_KEY: "${MINIO_ROOT_PASSWORD:-minioadmin123}"
+    depends_on:
+      - mlflow-db
+    networks:
+      - monitoring-net
+
+  mlops-runner:
+    build:
+      context: ./mlops/runner
+    container_name: mlops-runner
+    restart: unless-stopped
+    command: ["sleep", "infinity"]
+    environment:
+      CLICKHOUSE_URL: "http://admin:changeme@192.168.1.106:8123/tracer"
+      MLOPS_MINIO_ENDPOINT: "http://192.168.1.106:9002"
+      MLFLOW_TRACKING_URI: "http://mlflow:5000"
+      MLFLOW_S3_ENDPOINT_URL: "http://192.168.1.106:9002"
+      AWS_ACCESS_KEY_ID: "${MINIO_ROOT_USER:-minioadmin}"
+      AWS_SECRET_ACCESS_KEY: "${MINIO_ROOT_PASSWORD:-minioadmin123}"
+      DVC_REMOTE_URL: "s3://dvc"
+      DVC_REMOTE_NAME: "minio"
+      PYTHONPATH: "/workspace/mlops/src"
+    volumes:
+      - ./mlops:/workspace/mlops
+      - mlops-workspace:/workspace/runtime
+    depends_on:
+      - mlflow
+    networks:
+      - monitoring-net
+
 volumes:
   kafka-data:
   prometheus-data:
   grafana-data:
   airflow-db-data:
   airflow-data:
+  mlflow-db-data:
+  mlops-workspace:
 
 networks:
   monitoring-net:

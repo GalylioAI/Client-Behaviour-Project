@@ -56,9 +56,47 @@ services:
     networks:
       - kafka-net
 
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "9002:9000" # S3 API for DVC/MLflow artifacts; 9000 is already ClickHouse native TCP
+      - "9001:9001" # MinIO console
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+    volumes:
+      - minio-data:/data
+    networks:
+      - kafka-net
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: minio-init
+    depends_on:
+      - minio
+    restart: "no"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD; do sleep 2; done;
+      mc mb -p local/dvc;
+      mc mb -p local/mlflow;
+      mc mb -p local/deepchecks;
+      mc mb -p local/models;
+      exit 0;
+      "
+    networks:
+      - kafka-net
+
 volumes:
   kafka-data:
   clickhouse-data:
+  minio-data:
 
 networks:
   kafka-net:
