@@ -9,6 +9,9 @@ A comprehensive behavior tracking module for PrestaShop that tracks customer int
 - **Granular Configuration** - Enable/disable individual events and data elements
 - **PrestaShop Integration** - Full e-commerce tracking
 - **Client-Side Tracking** via JavaScript
+- **Server-Side Revenue Tracking** via PrestaShop order hooks
+- **Order Lifecycle Tracking** for cancelled, refunded, and failed orders
+- **Standard SaaS Payload** with `site_id`, `platform`, public write key, and server secret key support
 - **Debug Mode** for development
 - **Webhook Delivery** with retry logic and `navigator.sendBeacon`
 
@@ -18,7 +21,7 @@ A comprehensive behavior tracking module for PrestaShop that tracks customer int
 2. Go to Modules > Module Manager in PrestaShop admin
 3. Find "Customer Behaviour Tracker" and click "Install"
 4. Configure the module settings
-5. Edit `config.php` to set your webhook URL
+5. Configure `site_id`, webhook URL, public write key, and server secret key
 
 ## Configuration
 
@@ -37,8 +40,11 @@ Configure each event category and individual events:
 Edit `modules/behaviourtracker/config.php` to set:
 
 ```php
-'webhook_url' => 'https://your-webhook-endpoint.com/track'
-'buffer_interval' => 3  // seconds
+'webhook_url' => 'https://tracker.yatootunisie.tn/webhook',
+'site_id' => 'your-store-id',
+'write_key' => 'pk_live_your_public_write_key',
+'server_secret_key' => 'sk_live_your_server_secret_key',
+'buffer_interval' => 3, // seconds
 'enabled_sections' => [
     'session_navigation' => true,
     'product' => true,
@@ -47,6 +53,12 @@ Edit `modules/behaviourtracker/config.php` to set:
     'account' => true,
     'search' => true,
     'marketing' => true,
+],
+'selectors' => [
+    // Optional custom CSS selectors for non-standard themes.
+    'add_to_cart_buttons' => [],
+    'search_forms' => [],
+    'newsletter_forms' => [],
 ]
 ```
 
@@ -60,6 +72,7 @@ Edit `modules/behaviourtracker/config.php` to set:
 - **PAGE_VIEW** - Track page visits with configurable data elements
 - **SESSION_START** - New session detection
 - **SESSION_END** - Session termination (page unload)
+- **VISITOR_IDENTIFIED** - Links anonymous visitor history to a logged-in customer
 - **SCROLL_DEPTH** - Scroll tracking at 25%, 50%, 75%, 100%
 - **CLICK_EVENT** - Interactive element clicks
 
@@ -83,7 +96,8 @@ Edit `modules/behaviourtracker/config.php` to set:
 - **CHECKOUT_STEP** - Step progression
 - **SHIPPING_METHOD** - Shipping selection
 - **PAYMENT_METHOD** - Payment selection
-- **PURCHASE_COMPLETED** - Successful orders
+- **ORDER_CONFIRMATION_VIEW** - Browser confirmation page view, non-revenue event
+- **PURCHASE_COMPLETED** - Successful orders, sent server-side only to avoid duplicate revenue
 - **ORDER_STATUS_CHANGED** - Backend/admin order status transitions
 - **ORDER_CANCELLED** - Orders changed to cancelled status
 - **ORDER_REFUNDED** - Orders changed to refunded status
@@ -91,9 +105,10 @@ Edit `modules/behaviourtracker/config.php` to set:
 - **PAYMENT_FAILED** - Failed transactions
 
 ### 5. User Account Events
-- **REGISTRATION** - New account creation
-- **LOGIN** - User login
-- **LOGOUT** - User logout
+- **REGISTRATION** - Successful account creation, server-side
+- **LOGIN** - Successful user login, server-side
+- **LOGOUT** - User logout, server-side
+- **REGISTRATION_SUBMIT / LOGIN_SUBMIT / LOGOUT_CLICK** - Browser-side intent events
 - **PASSWORD_RESET** - Password reset requests
 - **PROFILE_UPDATE** - Account information changes
 - **WISHLIST** - Wishlist operations
@@ -118,13 +133,26 @@ All events follow a consistent JSON format:
 
 ```json
 {
-  "event": "event_name",
-  "event_type": "CATEGORY NAME",
-  "timestamp": "2026-02-11T15:30:00+01:00",
-  "session_id": "uuid-v4",
-  "customer_id": 123 or "guest",
-  "customer_email": "customer@example.com" or null,
-  ...event-specific data
+  "schema_version": "1.0",
+  "site_id": "your-store-id",
+  "platform": "prestashop",
+  "write_key": "pk_live_or_sk_live_key",
+  "source": "client_js or server_php",
+  "events": [
+    {
+      "event_id": "uuid-or-deterministic-id",
+      "event_name": "event_name",
+      "event_category": "checkout",
+      "timestamp": "2026-02-11T15:30:00+01:00",
+      "session_id": "uuid-v4",
+      "visitor_id": "persistent-cookie-id",
+      "customer_id": 123 or "guest",
+      "customer_email": "customer@example.com" or null,
+      "page": {},
+      "properties": {},
+      "context": {}
+    }
+  ]
 }
 ```
 
@@ -237,8 +265,8 @@ With debug mode enabled, open browser console to see:
 
 **Some events missing:**
 - Verify PrestaShop theme uses standard selectors
+- Add custom selectors in `config.php` under `selectors`
 - Check for JavaScript errors in console
-- Ensure jQuery is loaded (required for some events)
 - Test with default PrestaShop theme to isolate theme issues
 
 **High server load:**
@@ -261,4 +289,4 @@ Galylio
 
 ## Version
 
-1.0.4
+1.0.7

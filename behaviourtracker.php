@@ -34,7 +34,7 @@ class BehaviourTracker extends Module
     {
         $this->name = 'behaviourtracker';
         $this->tab = 'analytics_stats';
-        $this->version = '1.0.4';
+        $this->version = '1.0.7';
         $this->author = 'Galylio';
         $this->need_instance = 0;
         $this->ps_versions_compliancy = [
@@ -59,6 +59,9 @@ class BehaviourTracker extends Module
             $this->registerHook('actionValidateOrder') &&
             $this->registerHook('actionOrderStatusUpdate') &&
             $this->registerHook('actionOrderStatusPostUpdate') &&
+            $this->registerHook('actionCustomerAccountAdd') &&
+            $this->registerHook('actionAuthentication') &&
+            $this->registerHook('actionCustomerLogoutAfter') &&
             $this->installFixtures();
     }
 
@@ -872,6 +875,10 @@ class BehaviourTracker extends Module
                 ];
             }
 
+            $config['BT_SELECTORS'] = (isset($externalConfig['selectors']) && is_array($externalConfig['selectors']))
+                ? $externalConfig['selectors']
+                : [];
+
             if (empty($websiteId) && is_array($externalConfig) && isset($externalConfig['site_id'])) {
                 $websiteId = (string) $externalConfig['site_id'];
             } elseif (empty($websiteId) && is_array($externalConfig) && isset($externalConfig['website_id'])) {
@@ -894,6 +901,7 @@ class BehaviourTracker extends Module
                 'search' => true,
                 'marketing' => true,
             ];
+            $config['BT_SELECTORS'] = [];
         }
 
         $config['BT_SCHEMA_VERSION'] = '1.0';
@@ -942,6 +950,16 @@ class BehaviourTracker extends Module
         $customer = isset($params['customer']) ? $params['customer'] : null;
         $currency = isset($params['currency']) ? $params['currency'] : null;
         $orderStatus = isset($params['orderStatus']) ? $params['orderStatus'] : null;
+        $orderStatusId = ($orderStatus && isset($orderStatus->id)) ? (int) $orderStatus->id : (int) $order->current_state;
+        $orderStatusName = $this->getOrderStatusName($orderStatus);
+        if (!$orderStatusName) {
+            $orderStatusName = $this->getOrderStatusNameById($orderStatusId);
+        }
+        $initialStateEvent = $this->eventNameForOrderState($orderStatusId, $orderStatusName);
+        if (in_array($initialStateEvent, array('order_cancelled', 'order_refunded', 'order_failed'), true)) {
+            return;
+        }
+
         $products = method_exists($order, 'getProducts') ? $order->getProducts() : array();
         $items = array();
 
@@ -968,7 +986,8 @@ class BehaviourTracker extends Module
             'customer_email' => $customerEmail,
             'order_id' => (string) $order->id,
             'order_reference' => isset($order->reference) ? (string) $order->reference : '',
-            'order_status' => $this->getOrderStatusName($orderStatus),
+            'order_status' => $orderStatusName,
+            'order_status_id' => $orderStatusId,
             'order_total' => isset($order->total_paid_tax_incl) ? (float) $order->total_paid_tax_incl : 0,
             'order_subtotal' => isset($order->total_products_wt) ? (float) $order->total_products_wt : 0,
             'tax_amount' => isset($order->total_paid_tax_incl, $order->total_paid_tax_excl)
@@ -1049,6 +1068,12 @@ class BehaviourTracker extends Module
             ? $GLOBALS['BT_PREVIOUS_ORDER_STATUS_' . $idOrder]
             : array('id' => 0, 'name' => '');
         unset($GLOBALS['BT_PREVIOUS_ORDER_STATUS_' . $idOrder]);
+        if (!$previous['id'] && isset($params['oldOrderStatus']) && Validate::isLoadedObject($params['oldOrderStatus'])) {
+            $previous = array(
+                'id' => (int) $params['oldOrderStatus']->id,
+                'name' => $this->getOrderStatusName($params['oldOrderStatus']),
+            );
+        }
 
         $customer = isset($order->id_customer) ? new Customer((int) $order->id_customer) : null;
         $currency = isset($order->id_currency) ? new Currency((int) $order->id_currency) : null;
@@ -1122,6 +1147,72 @@ class BehaviourTracker extends Module
         return 'order_status_changed';
     }
 
+    public function hookActionCustomerAccountAdd($params)
+    {
+        if (!Configuration::get('BT_EVENT_REGISTRATION')) {
+            return;
+        }
+
+        $customer = isset($params['newCustomer']) ? $params['newCustomer'] : null;
+        if (!$customer || !Validate::isLoadedObject($customer)) {
+            return;
+        }
+
+        $this->sendServerEvent(array(
+            'event_id' => 'prestashop_customer_' . (int) $customer->id . '_account_registration',
+            'event' => 'account_registration',
+            'event_type' => 'USER ACCOUNT EVENTS',
+            'timestamp' => date('c'),
+            'customer_id' => (string) $customer->id,
+            'customer_email' => isset($customer->email) ? (string) $customer->email : '',
+            'registration_method' => 'email',
+            'registration_source' => 'prestashop',
+        ));
+    }
+
+    public function hookActionAuthentication($params)
+    {
+        if (!Configuration::get('BT_EVENT_LOGIN')) {
+            return;
+        }
+
+        $customer = isset($params['customer']) ? $params['customer'] : null;
+        if (!$customer || !Validate::isLoadedObject($customer)) {
+            return;
+        }
+
+        $this->sendServerEvent(array(
+            'event_id' => 'prestashop_customer_' . (int) $customer->id . '_login_' . date('YmdHis'),
+            'event' => 'login',
+            'event_type' => 'USER ACCOUNT EVENTS',
+            'timestamp' => date('c'),
+            'customer_id' => (string) $customer->id,
+            'customer_email' => isset($customer->email) ? (string) $customer->email : '',
+            'login_method' => 'email',
+        ));
+    }
+
+    public function hookActionCustomerLogoutAfter($params)
+    {
+        if (!Configuration::get('BT_EVENT_LOGOUT')) {
+            return;
+        }
+
+        $customer = isset($params['customer']) ? $params['customer'] : null;
+        if (!$customer || !Validate::isLoadedObject($customer)) {
+            return;
+        }
+
+        $this->sendServerEvent(array(
+            'event_id' => 'prestashop_customer_' . (int) $customer->id . '_logout_' . date('YmdHis'),
+            'event' => 'logout',
+            'event_type' => 'USER ACCOUNT EVENTS',
+            'timestamp' => date('c'),
+            'customer_id' => (string) $customer->id,
+            'customer_email' => isset($customer->email) ? (string) $customer->email : '',
+        ));
+    }
+
     protected function sendServerEvent($eventData)
     {
         $externalConfig = $this->getExternalConfig();
@@ -1149,7 +1240,7 @@ class BehaviourTracker extends Module
 
         $sent = $this->postJson($webhookUrl, $payload);
         if (!$sent) {
-            $this->logDebug('Failed to send server purchase event for order ' . (isset($eventData['order_id']) ? $eventData['order_id'] : 'unknown'));
+            $this->logDebug('Failed to send server event ' . (isset($eventData['event']) ? $eventData['event'] : 'unknown'));
         }
 
         return $sent;
@@ -1191,11 +1282,37 @@ class BehaviourTracker extends Module
             'site_id', 'siteId', 'website_id', 'context', 'properties', 'data'
         );
         $properties = array();
+        if (isset($eventData['properties']) && is_array($eventData['properties'])) {
+            $properties = array_merge($properties, $eventData['properties']);
+        }
+        if (isset($eventData['data']) && is_array($eventData['data'])) {
+            $properties = array_merge($properties, $eventData['data']);
+        }
 
         foreach ($eventData as $key => $value) {
             if (!in_array($key, $reserved, true)) {
                 $properties[$key] = $value;
             }
+        }
+
+        $page = (isset($eventData['page']) && is_array($eventData['page'])) ? $eventData['page'] : array();
+        if (isset($eventData['page_url']) && !isset($page['url'])) {
+            $page['url'] = $eventData['page_url'];
+        }
+        if (isset($eventData['url']) && !isset($page['url'])) {
+            $page['url'] = $eventData['url'];
+        }
+        if (isset($eventData['page_type']) && !isset($page['type'])) {
+            $page['type'] = $eventData['page_type'];
+        }
+        if (isset($eventData['page_title']) && !isset($page['title'])) {
+            $page['title'] = $eventData['page_title'];
+        }
+        if (isset($eventData['referrer_url']) && !isset($page['referrer'])) {
+            $page['referrer'] = $eventData['referrer_url'];
+        }
+        if (isset($eventData['referrer']) && !isset($page['referrer'])) {
+            $page['referrer'] = $eventData['referrer'];
         }
 
         $eventName = isset($eventData['event_name'])
@@ -1214,9 +1331,9 @@ class BehaviourTracker extends Module
             'visitor_id' => isset($_COOKIE['bt_visitor_id']) ? $_COOKIE['bt_visitor_id'] : '',
             'customer_id' => isset($eventData['customer_id']) ? (string) $eventData['customer_id'] : 'guest',
             'customer_email' => isset($eventData['customer_email']) ? (string) $eventData['customer_email'] : null,
-            'page' => array(),
+            'page' => $page,
             'properties' => $properties,
-            'context' => array(),
+            'context' => isset($eventData['context']) && is_array($eventData['context']) ? $eventData['context'] : array(),
         );
     }
 
@@ -1247,8 +1364,23 @@ class BehaviourTracker extends Module
             return 'marketing';
         }
 
-        if (strpos($name, 'purchase') !== false || strpos($name, 'checkout') !== false || strpos($name, 'payment') !== false || strpos($name, 'order_') !== false || strpos($name, 'cancel') !== false || strpos($name, 'refund') !== false) {
+        if (strpos($name, 'product') !== false) {
+            return 'product';
+        }
+        if (strpos($name, 'cart') !== false || strpos($name, 'coupon') !== false) {
+            return 'cart';
+        }
+        if (strpos($name, 'purchase') !== false || strpos($name, 'checkout') !== false || strpos($name, 'payment') !== false || strpos($name, 'shipping') !== false || strpos($name, 'order_') !== false || strpos($name, 'cancel') !== false || strpos($name, 'refund') !== false) {
             return 'checkout';
+        }
+        if (strpos($name, 'login') !== false || strpos($name, 'logout') !== false || strpos($name, 'registration') !== false || strpos($name, 'password') !== false || strpos($name, 'profile') !== false || strpos($name, 'wishlist') !== false || strpos($name, 'address') !== false || strpos($name, 'visitor_identified') !== false) {
+            return 'account';
+        }
+        if (strpos($name, 'search') !== false || strpos($name, 'filter') !== false || strpos($name, 'sort') !== false) {
+            return 'search';
+        }
+        if (strpos($name, 'newsletter') !== false || strpos($name, 'banner') !== false || strpos($name, 'popup') !== false || strpos($name, 'social') !== false) {
+            return 'marketing';
         }
 
         return 'custom';

@@ -18,7 +18,10 @@ const BehaviourTrackerProduct = {
         if (typeof bt_config !== 'undefined' && bt_config.BT_EVENT_PRODUCT_VIEW == '0') return;
 
         // Detect if we are on a product page
-        const productContainer = document.querySelector('[itemtype="https://schema.org/Product"], #product');
+        const productPageSelector = (typeof BehaviourTrackerBuffer !== 'undefined')
+            ? BehaviourTrackerBuffer.getSelectors('product_page_containers', ['[itemtype="https://schema.org/Product"]', '#product'])
+            : '[itemtype="https://schema.org/Product"], #product';
+        const productContainer = document.querySelector(productPageSelector);
         if (!productContainer || document.body.id !== 'product') return;
 
         const productIdInput = document.querySelector('#product_page_product_id');
@@ -51,7 +54,10 @@ const BehaviourTrackerProduct = {
         if (typeof bt_config !== 'undefined' && bt_config.BT_EVENT_PRODUCT_IMPRESSION == '0') return;
 
         // Common PrestaShop selector for product lists
-        const products = document.querySelectorAll('.product-miniature');
+        const productListSelector = (typeof BehaviourTrackerBuffer !== 'undefined')
+            ? BehaviourTrackerBuffer.getSelectors('product_list_items', ['.product-miniature'])
+            : '.product-miniature';
+        const products = document.querySelectorAll(productListSelector);
         if (products.length === 0) return;
 
         const productList = [];

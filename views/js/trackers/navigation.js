@@ -102,8 +102,21 @@ const BehaviourTrackerNavigation = {
             if (bt_config.BT_EVENT_CLICK == '0') return;
         }
 
+        const selectorString = (typeof BehaviourTrackerBuffer !== 'undefined')
+            ? BehaviourTrackerBuffer.getSelectors('click_elements', [
+                'a',
+                'button',
+                'input[type="submit"]',
+                'input[type="button"]',
+                '[role="button"]',
+                '.btn',
+                '.button',
+                '.cta'
+            ])
+            : 'a, button, input[type="submit"], input[type="button"], [role="button"], .btn, .button, .cta';
+
         document.addEventListener('click', (e) => {
-            const target = e.target.closest('a, button, input[type="submit"], input[type="button"], [role="button"], .btn, .button, .cta');
+            const target = e.target.closest(selectorString);
             if (target) {
                 this.sendClickEvent(target, e);
             }

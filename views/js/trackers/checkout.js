@@ -7,7 +7,7 @@ const BehaviourTrackerCheckout = {
         this.trackCheckoutSteps();
         this.trackShippingMethod();
         this.trackPaymentMethod();
-        this.trackPurchaseCompleted();
+        this.trackOrderConfirmationView();
         this.trackPaymentErrors();
     },
 
@@ -77,9 +77,13 @@ const BehaviourTrackerCheckout = {
     trackShippingMethod: function () {
         if (typeof bt_config !== 'undefined' && bt_config.BT_EVENT_SHIPPING_METHOD == '0') return;
 
+        const selectorString = (typeof BehaviourTrackerBuffer !== 'undefined')
+            ? BehaviourTrackerBuffer.getSelectors('shipping_method_inputs', ['[name*="delivery_option"]'])
+            : '[name*="delivery_option"]';
+
         // Listen for shipping method selection
         document.body.addEventListener('change', (e) => {
-            if (e.target.name && e.target.name.includes('delivery_option')) {
+            if (e.target.closest(selectorString)) {
                 const selectedOption = e.target.closest('.delivery-option');
                 if (selectedOption) {
                     const carrierName = selectedOption.querySelector('.carrier-name')?.innerText;
@@ -106,9 +110,13 @@ const BehaviourTrackerCheckout = {
     trackPaymentMethod: function () {
         if (typeof bt_config !== 'undefined' && bt_config.BT_EVENT_PAYMENT_METHOD == '0') return;
 
+        const selectorString = (typeof BehaviourTrackerBuffer !== 'undefined')
+            ? BehaviourTrackerBuffer.getSelectors('payment_method_inputs', ['[name*="payment-option"]'])
+            : '[name*="payment-option"]';
+
         // Listen for payment method selection
         document.body.addEventListener('change', (e) => {
-            if (e.target.name && e.target.name.includes('payment-option')) {
+            if (e.target.closest(selectorString)) {
                 const paymentLabel = document.querySelector(`label[for="${e.target.id}"]`)?.innerText;
 
                 const data = {
@@ -125,9 +133,13 @@ const BehaviourTrackerCheckout = {
     },
 
     /**
-     * Track Purchase Completed
+     * Track order confirmation page views.
+     *
+     * Revenue is tracked server-side through actionValidateOrder. Keeping this
+     * browser event non-revenue prevents double-counting when the customer lands
+     * on the confirmation page after the backend order has already been created.
      */
-    trackPurchaseCompleted: function () {
+    trackOrderConfirmationView: function () {
         if (typeof bt_config !== 'undefined' && bt_config.BT_EVENT_PURCHASE_COMPLETED == '0') return;
 
         // Check if we're on order confirmation page
@@ -138,7 +150,7 @@ const BehaviourTrackerCheckout = {
         const orderTotal = document.querySelector('.order-confirmation-total .value')?.innerText;
 
         const data = {
-            event: 'purchase_completed',
+            event: 'order_confirmation_view',
             event_type: 'CHECKOUT & PURCHASE EVENTS',
             timestamp: new Date().toISOString(),
             session_id: BehaviourTrackerSession.getOrCreateSessionId(),

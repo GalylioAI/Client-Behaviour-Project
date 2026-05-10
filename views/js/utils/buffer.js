@@ -335,6 +335,17 @@ const BehaviourTrackerBuffer = {
         return this.config.writeKey || '';
     },
 
+    getSelectors: function (key, defaults) {
+        const base = Array.isArray(defaults) ? defaults : [];
+        const extra = (typeof bt_config !== 'undefined' &&
+            bt_config.BT_SELECTORS &&
+            Array.isArray(bt_config.BT_SELECTORS[key]))
+            ? bt_config.BT_SELECTORS[key]
+            : [];
+
+        return Array.from(new Set(base.concat(extra))).join(',');
+    },
+
     resolveSessionId: function () {
         if (typeof BehaviourTrackerSession !== 'undefined') {
             if (BehaviourTrackerSession.sessionId) return BehaviourTrackerSession.sessionId;

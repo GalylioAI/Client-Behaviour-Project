@@ -528,7 +528,7 @@ Data Template:
 ---
 
 4.5 PURCHASE_COMPLETED
-Description: User successfully completes a purchase
+Description: Server-side event emitted when PrestaShop validates an order. This is the authoritative revenue event.
 Data Template:
 {
   "event": "purchase_completed",
@@ -578,7 +578,23 @@ Data Template:
 
 ---
 
-4.6 PAYMENT_FAILED
+4.6 ORDER_CONFIRMATION_VIEW
+Description: Browser-side confirmation page view. This is a journey event only and must not be used as revenue.
+Data Template:
+{
+  "event": "order_confirmation_view",
+  "timestamp": "2024-02-06 14:42:05",
+  "session_id": "unique_session_identifier",
+  "customer_id": "12345",
+  "order_reference": "ABCDXYZ",
+  "order_total": "198.95",
+  "page_url": "/order-confirmation"
+}
+*** Improvement Idea: Compare backend orders against confirmation page views to detect redirect/payment UX issues
+
+---
+
+4.7 PAYMENT_FAILED
 Description: Payment attempt failed
 Data Template:
 {
@@ -597,7 +613,7 @@ Data Template:
 
 ---
 
-4.7 ORDER_MODIFICATION
+4.8 ORDER_MODIFICATION
 Description: User modifies order before shipping
 Data Template:
 {

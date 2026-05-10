@@ -17,7 +17,10 @@ const BehaviourTrackerSearch = {
         if (typeof bt_config !== 'undefined' && bt_config.BT_EVENT_SEARCH_QUERY == '0') return;
 
         // Find search forms
-        const searchForms = document.querySelectorAll('#search_widget form, [action*="search"]');
+        const searchSelector = (typeof BehaviourTrackerBuffer !== 'undefined')
+            ? BehaviourTrackerBuffer.getSelectors('search_forms', ['#search_widget form', '[action*="search"]'])
+            : '#search_widget form, [action*="search"]';
+        const searchForms = document.querySelectorAll(searchSelector);
 
         searchForms.forEach(form => {
             form.addEventListener('submit', (e) => {
@@ -71,9 +74,13 @@ const BehaviourTrackerSearch = {
     trackFilters: function () {
         if (typeof bt_config !== 'undefined' && bt_config.BT_EVENT_FILTER_APPLIED == '0') return;
 
+        const filterSelector = (typeof BehaviourTrackerBuffer !== 'undefined')
+            ? BehaviourTrackerBuffer.getSelectors('filter_inputs', ['.facet-checkbox input', '[data-search-url]'])
+            : '.facet-checkbox input, [data-search-url]';
+
         // Watch for faceted navigation / filter checkboxes
         document.body.addEventListener('change', (e) => {
-            const filterInput = e.target.closest('.facet-checkbox input, [data-search-url]');
+            const filterInput = e.target.closest(filterSelector);
             if (filterInput) {
                 const filterLabel = filterInput.closest('label')?.innerText || filterInput.name;
                 const filterValue = filterInput.value;
@@ -99,9 +106,13 @@ const BehaviourTrackerSearch = {
     trackSort: function () {
         if (typeof bt_config !== 'undefined' && bt_config.BT_EVENT_SORT_CHANGED == '0') return;
 
+        const sortSelector = (typeof BehaviourTrackerBuffer !== 'undefined')
+            ? BehaviourTrackerBuffer.getSelectors('sort_selects', ['.products-sort-order select', '[name*="order"]'])
+            : '.products-sort-order select, [name*="order"]';
+
         // Watch for sort dropdown changes
         document.body.addEventListener('change', (e) => {
-            const sortSelect = e.target.closest('.products-sort-order select, [name*="order"]');
+            const sortSelect = e.target.closest(sortSelector);
             if (sortSelect) {
                 const sortOption = sortSelect.options[sortSelect.selectedIndex]?.text;
 

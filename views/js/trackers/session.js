@@ -4,15 +4,34 @@
  */
 const BehaviourTrackerSession = {
     sessionId: null,
+    visitorId: null,
 
     init: function () {
+        this.visitorId = this.getOrCreateVisitorId();
         this.sessionId = this.getOrCreateSessionId();
         this.trackSessionStart();
+        this.checkVisitorIdentification();
 
         // Session End is tricky in JS. We can try to hook into visibility change or unload, 
         // but it's not guaranteed. True "session end" usually calculated on backend via timeout.
         // We will send a beacon on unload if possible.
         window.addEventListener('beforeunload', this.handleUnload.bind(this));
+    },
+
+    /**
+     * Get or create persistent Visitor ID (survives browser restarts).
+     */
+    getOrCreateVisitorId: function () {
+        let visitorId = this.getCookie('bt_visitor_id');
+        if (!visitorId) {
+            visitorId = this.generateUUID();
+            this.setCookie('bt_visitor_id', visitorId, 60 * 24 * 365 * 2);
+            this.isNewVisitor = true;
+        } else {
+            this.setCookie('bt_visitor_id', visitorId, 60 * 24 * 365 * 2);
+            this.isNewVisitor = false;
+        }
+        return visitorId;
     },
 
     /**
@@ -33,9 +52,36 @@ const BehaviourTrackerSession = {
     },
 
     /**
+     * Link the anonymous visitor cookie to the logged-in customer once.
+     */
+    checkVisitorIdentification: function () {
+        const customerId = (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest';
+        if (customerId === 'guest' || customerId === 0 || customerId === '0') return;
+
+        const identifiedKey = 'bt_identified_' + customerId;
+        if (this.getCookie(identifiedKey)) return;
+
+        this.setCookie(identifiedKey, '1', 60 * 24 * 365 * 2);
+        this.sendData({
+            event: 'visitor_identified',
+            event_type: 'USER ACCOUNT EVENTS',
+            timestamp: new Date().toISOString(),
+            session_id: this.sessionId,
+            visitor_id: this.visitorId,
+            customer_id: customerId,
+            customer_email: (typeof bt_customer_email !== 'undefined') ? bt_customer_email : null,
+            identification_method: 'login',
+            is_new_visitor: this.isNewVisitor
+        });
+    },
+
+    /**
      * Generate UUID
      */
     generateUUID: function () {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+            return window.crypto.randomUUID();
+        }
         return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
             var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
             return v.toString(16);
@@ -52,7 +98,7 @@ const BehaviourTrackerSession = {
             date.setTime(date.getTime() + (minutes * 60 * 1000));
             expires = "; expires=" + date.toUTCString();
         }
-        document.cookie = name + "=" + (value || "") + expires + "; path=/";
+        document.cookie = name + "=" + (value || "") + expires + "; path=/; SameSite=Lax";
     },
 
     /**
@@ -88,7 +134,9 @@ const BehaviourTrackerSession = {
             event_type: 'USER SESSION & NAVIGATION EVENTS',
             timestamp: new Date().toISOString(),
             session_id: this.sessionId,
+            visitor_id: this.visitorId,
             customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
+            is_new_visitor: this.isNewVisitor,
             entry_page: window.location.pathname,
             referrer: document.referrer,
             device_type: this.getDeviceType(),
@@ -98,9 +146,6 @@ const BehaviourTrackerSession = {
         this.sendData(data);
     },
 
-    /**
-     * Handle Unload (Session End attempt)
-     */
     /**
      * Handle Unload (Session End attempt)
      */
@@ -119,6 +164,7 @@ const BehaviourTrackerSession = {
             event_type: 'USER SESSION & NAVIGATION EVENTS',
             timestamp: new Date().toISOString(),
             session_id: this.sessionId,
+            visitor_id: this.visitorId,
             customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
         };
 
@@ -151,9 +197,6 @@ const BehaviourTrackerSession = {
         return "desktop";
     },
 
-    /**
-     * Send Data
-     */
     /**
      * Send Data (Delegated to Buffer)
      */

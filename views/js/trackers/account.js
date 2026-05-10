@@ -19,7 +19,10 @@ const BehaviourTrackerAccount = {
         if (typeof bt_config !== 'undefined' && bt_config.BT_EVENT_REGISTRATION == '0') return;
 
         // Watch for registration form submission
-        const regForms = document.querySelectorAll('#customer-form, #create-account_form, [action*="register"]');
+        const regSelector = (typeof BehaviourTrackerBuffer !== 'undefined')
+            ? BehaviourTrackerBuffer.getSelectors('register_forms', ['#customer-form', '#create-account_form', '[action*="register"]'])
+            : '#customer-form, #create-account_form, [action*="register"]';
+        const regForms = document.querySelectorAll(regSelector);
 
         regForms.forEach(form => {
             form.addEventListener('submit', (e) => {
@@ -27,7 +30,7 @@ const BehaviourTrackerAccount = {
                 const newsletterOptin = form.querySelector('[name="newsletter"]')?.checked || false;
 
                 const data = {
-                    event: 'account_registration',
+                    event: 'account_registration_submit',
                     event_type: 'USER ACCOUNT EVENTS',
                     timestamp: new Date().toISOString(),
                     session_id: BehaviourTrackerSession.getOrCreateSessionId(),
@@ -46,14 +49,17 @@ const BehaviourTrackerAccount = {
     trackLogin: function () {
         if (typeof bt_config !== 'undefined' && bt_config.BT_EVENT_LOGIN == '0') return;
 
-        const loginForms = document.querySelectorAll('#login-form, [action*="login"]');
+        const loginSelector = (typeof BehaviourTrackerBuffer !== 'undefined')
+            ? BehaviourTrackerBuffer.getSelectors('login_forms', ['#login-form', '[action*="login"]'])
+            : '#login-form, [action*="login"]';
+        const loginForms = document.querySelectorAll(loginSelector);
 
         loginForms.forEach(form => {
             form.addEventListener('submit', (e) => {
                 const email = form.querySelector('[name="email"]')?.value;
 
                 const data = {
-                    event: 'login',
+                    event: 'login_submit',
                     event_type: 'USER ACCOUNT EVENTS',
                     timestamp: new Date().toISOString(),
                     session_id: BehaviourTrackerSession.getOrCreateSessionId(),
@@ -75,7 +81,7 @@ const BehaviourTrackerAccount = {
             const logoutLink = e.target.closest('[href*="logout"], .logout, [data-action="logout"]');
             if (logoutLink) {
                 const data = {
-                    event: 'logout',
+                    event: 'logout_click',
                     event_type: 'USER ACCOUNT EVENTS',
                     timestamp: new Date().toISOString(),
                     session_id: BehaviourTrackerSession.getOrCreateSessionId(),
@@ -92,7 +98,10 @@ const BehaviourTrackerAccount = {
     trackPasswordReset: function () {
         if (typeof bt_config !== 'undefined' && bt_config.BT_EVENT_PASSWORD_RESET == '0') return;
 
-        const resetForms = document.querySelectorAll('[action*="password"], #password-reset');
+        const resetSelector = (typeof BehaviourTrackerBuffer !== 'undefined')
+            ? BehaviourTrackerBuffer.getSelectors('reset_password_forms', ['[action*="password"]', '#password-reset'])
+            : '[action*="password"], #password-reset';
+        const resetForms = document.querySelectorAll(resetSelector);
 
         resetForms.forEach(form => {
             form.addEventListener('submit', (e) => {
@@ -117,7 +126,10 @@ const BehaviourTrackerAccount = {
         if (typeof bt_config !== 'undefined' && bt_config.BT_EVENT_PROFILE_UPDATE == '0') return;
 
         // Watch for profile/identity form submissions
-        const profileForms = document.querySelectorAll('#customer-form, [action*="identity"]');
+        const profileSelector = (typeof BehaviourTrackerBuffer !== 'undefined')
+            ? BehaviourTrackerBuffer.getSelectors('edit_account_forms', ['#customer-form', '[action*="identity"]'])
+            : '#customer-form, [action*="identity"]';
+        const profileForms = document.querySelectorAll(profileSelector);
 
         profileForms.forEach(form => {
             form.addEventListener('submit', (e) => {

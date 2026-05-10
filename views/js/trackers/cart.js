@@ -19,8 +19,12 @@ const BehaviourTrackerCart = {
      * Fallback if PrestaShop events fail
      */
     trackAddToCart: function () {
+        const selectorString = (typeof BehaviourTrackerBuffer !== 'undefined')
+            ? BehaviourTrackerBuffer.getSelectors('add_to_cart_buttons', ['.add-to-cart'])
+            : '.add-to-cart';
+
         document.body.addEventListener('click', (e) => {
-            const btn = e.target.closest('.add-to-cart');
+            const btn = e.target.closest(selectorString);
             if (btn) {
                 this.trackAddToCartButton(btn);
             }
@@ -128,8 +132,12 @@ const BehaviourTrackerCart = {
     trackQuantityChange: function () {
         if (typeof bt_config !== 'undefined' && bt_config.BT_EVENT_CART_QUANTITY_CHANGE == '0') return;
 
+        const selectorString = (typeof BehaviourTrackerBuffer !== 'undefined')
+            ? BehaviourTrackerBuffer.getSelectors('cart_quantity_inputs', ['.cart-line-product-quantity input[type="number"]'])
+            : '.cart-line-product-quantity input[type="number"]';
+
         document.body.addEventListener('change', (e) => {
-            const qtyInput = e.target.closest('.cart-line-product-quantity input[type="number"]');
+            const qtyInput = e.target.closest(selectorString);
             if (qtyInput) {
                 const data = {
                     event: 'cart_quantity_change',
@@ -150,7 +158,10 @@ const BehaviourTrackerCart = {
         if (typeof bt_config !== 'undefined' && bt_config.BT_EVENT_COUPON_APPLY == '0') return;
 
         // Track coupon application
-        const couponForms = document.querySelectorAll('[data-action="show-voucher"], #promo-code');
+        const couponSelector = (typeof BehaviourTrackerBuffer !== 'undefined')
+            ? BehaviourTrackerBuffer.getSelectors('coupon_forms', ['[data-action="show-voucher"]', '#promo-code'])
+            : '[data-action="show-voucher"], #promo-code';
+        const couponForms = document.querySelectorAll(couponSelector);
         couponForms.forEach(form => {
             form.addEventListener('submit', (e) => {
                 const couponInput = form.querySelector('[name="discount_name"]');

@@ -15,7 +15,10 @@ const BehaviourTrackerMarketing = {
     trackNewsletterSignup: function () {
         if (typeof bt_config !== 'undefined' && bt_config.BT_EVENT_NEWSLETTER_SIGNUP == '0') return;
 
-        const newsletterForms = document.querySelectorAll('#newsletter-subscription, [action*="newsletter"]');
+        const newsletterSelector = (typeof BehaviourTrackerBuffer !== 'undefined')
+            ? BehaviourTrackerBuffer.getSelectors('newsletter_forms', ['#newsletter-subscription', '[action*="newsletter"]'])
+            : '#newsletter-subscription, [action*="newsletter"]';
+        const newsletterForms = document.querySelectorAll(newsletterSelector);
 
         newsletterForms.forEach(form => {
             form.addEventListener('submit', (e) => {
@@ -70,8 +73,12 @@ const BehaviourTrackerMarketing = {
     trackBannerClicks: function () {
         if (typeof bt_config !== 'undefined' && bt_config.BT_EVENT_BANNER_CLICK == '0') return;
 
+        const bannerSelector = (typeof BehaviourTrackerBuffer !== 'undefined')
+            ? BehaviourTrackerBuffer.getSelectors('banner_elements', ['.banner', '.promo-banner', '[data-banner]'])
+            : '.banner, .promo-banner, [data-banner]';
+
         document.body.addEventListener('click', (e) => {
-            const banner = e.target.closest('.banner, .promo-banner, [data-banner]');
+            const banner = e.target.closest(bannerSelector);
             if (banner) {
                 const bannerId = banner.id || banner.dataset.banner || 'unknown';
                 const bannerHref = e.target.closest('a')?.href;
@@ -95,8 +102,12 @@ const BehaviourTrackerMarketing = {
     trackSocialShare: function () {
         if (typeof bt_config !== 'undefined' && bt_config.BT_EVENT_SOCIAL_SHARE == '0') return;
 
+        const shareSelector = (typeof BehaviourTrackerBuffer !== 'undefined')
+            ? BehaviourTrackerBuffer.getSelectors('social_share_buttons', ['.social-share', '[data-action="share"]'])
+            : '.social-share, [data-action="share"]';
+
         document.body.addEventListener('click', (e) => {
-            const shareBtn = e.target.closest('.social-share, [data-action="share"]');
+            const shareBtn = e.target.closest(shareSelector);
             if (shareBtn) {
                 const platform = shareBtn.dataset.share || shareBtn.className.match(/(facebook|twitter|pinterest|instagram)/i)?.[0] || 'unknown';
 
