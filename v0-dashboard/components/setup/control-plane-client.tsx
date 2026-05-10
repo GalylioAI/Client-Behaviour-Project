@@ -137,13 +137,14 @@ function CodeLine({ label, value, secret = false }: { label: string; value: stri
 }
 
 export function ControlPlaneClient({ data }: { data: ControlPlaneData }) {
+  const currentTenant = data.tenants[0]
   const [form, setForm] = useState({
-    tenant_name: "",
-    admin_email: "",
+    tenant_name: currentTenant?.name || "",
+    admin_email: currentTenant?.contact_email || "",
     domain: "",
     platform: "prestashop",
     site_id: "",
-    tenant_id: "",
+    tenant_id: currentTenant?.tenant_id || "",
     allowed_origins: "",
     timezone: "Africa/Tunis",
     plan: "starter",
@@ -245,14 +246,15 @@ export function ControlPlaneClient({ data }: { data: ControlPlaneData }) {
         </section>
 
         <section className="grid gap-5 xl:grid-cols-[440px_minmax(0,1fr)]">
-          <SetupSurface title="Create Account And Website" description="MVP account creation: create a tenant, register one website, generate tracker keys, and lock allowed origins.">
+          <SetupSurface title="Add Website To This Account" description="Register another WordPress or PrestaShop site under the current workspace, generate tracker keys, and lock allowed origins.">
             <form className="space-y-4" onSubmit={submit}>
-              <Field label="Customer / company name">
-                <Input value={form.tenant_name} onChange={(event) => updateField("tenant_name", event.target.value)} placeholder="Parahouse" />
-              </Field>
-              <Field label="Admin email">
-                <Input type="email" value={form.admin_email} onChange={(event) => updateField("admin_email", event.target.value)} placeholder="owner@example.tn" />
-              </Field>
+              <div className="rounded-md border border-blue-100 bg-blue-50 p-3">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-blue-500">Current account</div>
+                <div className="mt-1 text-sm font-semibold text-blue-950">{currentTenant?.name || "Your workspace"}</div>
+                <div className="mt-0.5 truncate text-xs text-blue-700">
+                  {currentTenant?.contact_email || form.admin_email || "Logged-in tenant"} · {currentTenant?.tenant_id || form.tenant_id || "tenant"}
+                </div>
+              </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Website domain">
                   <Input value={form.domain} onChange={(event) => updateField("domain", event.target.value)} placeholder="example.tn" />
@@ -272,11 +274,19 @@ export function ControlPlaneClient({ data }: { data: ControlPlaneData }) {
                 </Field>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Site ID" helper="This must match the plugin config exactly.">
+                <Field label="Site ID" helper="Optional. Leave empty to generate one from the domain.">
                   <Input value={form.site_id} onChange={(event) => updateField("site_id", event.target.value)} placeholder="parahouse" />
                 </Field>
-                <Field label="Tenant ID" helper="Optional. Leave empty to generate one.">
-                  <Input value={form.tenant_id} onChange={(event) => updateField("tenant_id", event.target.value)} placeholder="tenant_parahouse" />
+                <Field label="Plan">
+                  <select
+                    className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    value={form.plan}
+                    onChange={(event) => updateField("plan", event.target.value)}
+                  >
+                    <option value="starter">Starter</option>
+                    <option value="growth">Growth</option>
+                    <option value="business">Business</option>
+                  </select>
                 </Field>
               </div>
               <Field label="Allowed origins" helper="One per line. Leave empty for https://domain and https://www.domain.">
@@ -295,7 +305,7 @@ export function ControlPlaneClient({ data }: { data: ControlPlaneData }) {
               ) : null}
               <Button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 hover:bg-blue-700">
                 {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
-                Generate Keys
+                Add Website And Generate Keys
               </Button>
             </form>
           </SetupSurface>

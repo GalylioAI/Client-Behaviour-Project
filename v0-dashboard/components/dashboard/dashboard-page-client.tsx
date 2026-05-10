@@ -64,6 +64,7 @@ import {
   buildTopReferrers,
 } from "@/lib/dashboard-adapter"
 import type { BehaviorInsights } from "@/lib/insights"
+import type { TenantSiteAccess } from "@/lib/tenant-access"
 import { cn } from "@/lib/utils"
 
 const chartColors = ["#1769E8", "#14B8A6", "#6366F1", "#F59E0B", "#EF4444", "#64748B"]
@@ -79,6 +80,8 @@ type DashboardView =
   | "sites"
   | "pipelines"
   | "settings"
+
+type DashboardSite = Pick<TenantSiteAccess, "site_id" | "tenant_id" | "domain" | "platform" | "status">
 
 const viewMeta: Record<DashboardView, { title: string; description: string }> = {
   overview: {
@@ -573,9 +576,128 @@ function Surface({
   )
 }
 
-function Sidebar({ siteDomain, siteId, activeView }: { siteDomain: string; siteId: string; activeView: DashboardView }) {
+function siteDisplayName(site: DashboardSite) {
+  return site.domain || site.site_id || "Website"
+}
+
+function platformDisplayName(platform: string) {
+  if (platform === "wordpress") return "WordPress"
+  if (platform === "prestashop") return "PrestaShop"
+  return platform || "Website"
+}
+
+function appHrefForSite(siteId: string, view: DashboardView) {
+  return siteId ? `/app?site_id=${encodeURIComponent(siteId)}&view=${encodeURIComponent(view)}` : `/app?view=${encodeURIComponent(view)}`
+}
+
+function SiteSelector({
+  sites,
+  currentSite,
+  activeView,
+}: {
+  sites: DashboardSite[]
+  currentSite: DashboardSite
+  activeView: DashboardView
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const currentSiteId = currentSite.site_id || sites[0]?.site_id || ""
+  const sortedSites = sites.length ? sites : [currentSite]
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+        className={cn(
+          "flex w-full items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-left transition",
+          "hover:border-blue-200 hover:bg-blue-50/40 focus:outline-none focus:ring-2 focus:ring-blue-100"
+        )}
+        aria-expanded={isOpen}
+      >
+        <span className="min-w-0">
+          <span className="block truncate text-xs font-semibold text-slate-900">{siteDisplayName(currentSite)}</span>
+          <span className="block truncate text-xs text-slate-500">
+            {platformDisplayName(currentSite.platform)} · {currentSite.site_id || "no site_id"}
+          </span>
+        </span>
+        <ChevronDown className={cn("h-4 w-4 shrink-0 text-slate-400 transition-transform", isOpen && "rotate-180")} />
+      </button>
+
+      {isOpen ? (
+        <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-40 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl shadow-slate-200/60">
+          <div className="border-b border-slate-100 px-3 py-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Workspace websites</div>
+            <div className="mt-0.5 text-xs text-slate-500">Switch without creating another account.</div>
+          </div>
+          <div className="max-h-72 overflow-y-auto p-1">
+            {sortedSites.map((site) => {
+              const isCurrent = site.site_id === currentSiteId
+              return (
+                <Link
+                  key={site.site_id}
+                  href={appHrefForSite(site.site_id, activeView)}
+                  onClick={() => setIsOpen(false)}
+                  className={cn(
+                    "flex items-center gap-3 rounded-md px-2.5 py-2 text-sm transition",
+                    isCurrent ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-50 hover:text-slate-950"
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "grid h-8 w-8 shrink-0 place-items-center rounded-md",
+                      isCurrent ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
+                    )}
+                  >
+                    <Globe2 className="h-4 w-4" />
+                  </div>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-semibold">{siteDisplayName(site)}</span>
+                    <span className={cn("block truncate text-[11px]", isCurrent ? "text-blue-600/75" : "text-slate-500")}>
+                      {platformDisplayName(site.platform)} · {site.site_id}
+                    </span>
+                  </span>
+                  {isCurrent ? (
+                    <Badge variant="outline" className="border-blue-100 bg-white text-[10px] text-blue-700">
+                      Current
+                    </Badge>
+                  ) : null}
+                </Link>
+              )
+            })}
+          </div>
+          <div className="border-t border-slate-100 p-1">
+            <Link
+              href="/setup"
+              onClick={() => setIsOpen(false)}
+              className="flex items-center gap-3 rounded-md px-2.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-950"
+            >
+              <div className="grid h-8 w-8 place-items-center rounded-md bg-blue-50 text-blue-700">
+                <Plus className="h-4 w-4" />
+              </div>
+              <span>
+                <span className="block text-xs font-semibold">Add website</span>
+                <span className="block text-[11px] font-normal text-slate-500">Generate keys under this account</span>
+              </span>
+            </Link>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function Sidebar({
+  sites,
+  currentSite,
+  activeView,
+}: {
+  sites: DashboardSite[]
+  currentSite: DashboardSite
+  activeView: DashboardView
+}) {
+  const siteId = currentSite.site_id || sites[0]?.site_id || ""
   const siteQuery = siteId ? `?site_id=${encodeURIComponent(siteId)}` : ""
-  const appHref = (view: DashboardView) => `/app?site_id=${encodeURIComponent(siteId)}&view=${encodeURIComponent(view)}`
+  const appHref = (view: DashboardView) => appHrefForSite(siteId, view)
 
   return (
     <aside className="hidden h-screen border-r border-slate-200 bg-white lg:sticky lg:top-0 lg:flex lg:flex-col">
@@ -590,13 +712,7 @@ function Sidebar({ siteDomain, siteId, activeView }: { siteDomain: string; siteI
       </div>
 
       <div className="border-b border-slate-100 px-4 py-4">
-        <button className="flex w-full items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-left">
-          <span>
-            <span className="block text-xs font-semibold text-slate-900">Demo Store</span>
-            <span className="block truncate text-xs text-slate-500">{siteDomain || "tdiscount.tn"}</span>
-          </span>
-          <ChevronDown className="h-4 w-4 text-slate-400" />
-        </button>
+        <SiteSelector sites={sites} currentSite={currentSite} activeView={activeView} />
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-3">
@@ -2030,12 +2146,35 @@ function ActiveViewContent({
   }
 }
 
-export function DashboardPageClient({ insights, initialView }: { insights: BehaviorInsights; initialView?: string }) {
+export function DashboardPageClient({
+  insights,
+  initialView,
+  sites = [],
+  selectedSiteId,
+}: {
+  insights: BehaviorInsights
+  initialView?: string
+  sites?: DashboardSite[]
+  selectedSiteId?: string
+}) {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const activeView = normalizeView(initialView)
   const meta = viewMeta[activeView]
   const kpis = buildKpis(insights)
   const site = insights.operations.site
+  const currentSite: DashboardSite = {
+    site_id: site.site_id || selectedSiteId || "",
+    tenant_id: site.tenant_id,
+    domain: site.domain,
+    platform: site.platform,
+    status: site.status,
+  }
+  const sidebarSites = sites.length
+    ? sites
+    : currentSite.site_id
+      ? [currentSite]
+      : []
+  const selectedSidebarSite = sidebarSites.find((item) => item.site_id === (selectedSiteId || currentSite.site_id)) || currentSite
   const latestEvent = insights.operations.recent_events[0]?.received_at || insights.dataset.date_range_utc.max
 
   const metricCards = useMemo(
@@ -2086,7 +2225,7 @@ export function DashboardPageClient({ insights, initialView }: { insights: Behav
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <div className="grid min-h-screen lg:grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)_360px]">
-        <Sidebar siteDomain={site.domain} siteId={site.site_id || "tdiscount"} activeView={activeView} />
+        <Sidebar sites={sidebarSites} currentSite={selectedSidebarSite} activeView={activeView} />
 
         <main className="min-w-0">
           <Topbar siteLabel={site.domain || site.site_id || "tdiscount"} siteId={site.site_id || "tdiscount"} latestEvent={latestEvent} />

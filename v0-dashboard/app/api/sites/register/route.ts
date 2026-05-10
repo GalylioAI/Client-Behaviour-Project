@@ -77,7 +77,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json()
     const session = getSessionFromRequest(request)
-    const tenantName = String(body.tenant_name || "").trim()
+    let tenantName = String(body.tenant_name || "").trim()
     const adminEmail = String(session?.email || body.admin_email || "").trim().toLowerCase()
     const domain = normalizeDomain(String(body.domain || ""))
     const platform = String(body.platform || "").trim().toLowerCase()
@@ -88,9 +88,6 @@ export async function POST(request: Request) {
     const allowedOrigins = parseOrigins(body.allowed_origins, domain)
     const password = String(body.password || "")
 
-    if (!tenantName) {
-      return NextResponse.json({ error: "Tenant name is required." }, { status: 400 })
-    }
     if (!adminEmail || !adminEmail.includes("@")) {
       return NextResponse.json({ error: "A valid admin email is required." }, { status: 400 })
     }
@@ -109,6 +106,23 @@ export async function POST(request: Request) {
 
     await ensureControlPlaneSchema()
     await ensureAuthSchema()
+
+    if (session && !tenantName) {
+      const tenantRows = await clickhouseQuery<{ name: string }>(`
+        SELECT name
+        FROM tracer.tenants FINAL
+        WHERE tenant_id = ${sqlString(tenantId)}
+        LIMIT 1
+      `)
+      tenantName = String(tenantRows[0]?.name || "").trim()
+    }
+
+    if (!tenantName) {
+      if (!session) {
+        return NextResponse.json({ error: "Tenant name is required." }, { status: 400 })
+      }
+      tenantName = adminEmail.split("@")[0] || domain
+    }
 
     if (!session) {
       const existingUser = await findUserByEmail(adminEmail)

@@ -18,7 +18,7 @@ export async function loadTenantSites(tenantId: string): Promise<TenantSiteAcces
       domain,
       platform,
       status
-    FROM tracer.sites
+    FROM tracer.sites FINAL
     WHERE tenant_id = ${sqlString(tenantId)}
       AND status = 'active'
     ORDER BY updated_at DESC
