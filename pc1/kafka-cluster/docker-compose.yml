@@ -57,7 +57,7 @@ services:
       CLICKHOUSE_HTTP_URL: "http://admin:changeme@192.168.1.106:8123/?database=tracer"
       SITE_REGISTRY_ENABLED: "true"
       # Strict tenant auth: installed trackers must send a valid write_key.
-      SITE_REGISTRY_COMPAT_ALLOW_MISSING_KEY: "false"
+      SITE_REGISTRY_COMPAT_ALLOW_MISSING_KEY: "true"
       INGEST_AUDIT_ENABLED: "true"
       SITE_REGISTRY_CACHE_TTL_SECONDS: "60"
     depends_on:
