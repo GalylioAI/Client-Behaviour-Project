@@ -94,6 +94,9 @@ export async function POST(request: Request) {
     if (!domain) {
       return NextResponse.json({ error: "Website domain is required." }, { status: 400 })
     }
+    if (!domain.includes(".") && domain !== "localhost") {
+      return NextResponse.json({ error: "Use the full website domain, for example parahouse.tn." }, { status: 400 })
+    }
     if (!siteId) {
       return NextResponse.json({ error: "Site ID could not be generated." }, { status: 400 })
     }
