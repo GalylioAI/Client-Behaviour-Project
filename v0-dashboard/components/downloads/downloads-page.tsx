@@ -34,10 +34,10 @@ const plugins = [
   {
     id: "prestashop",
     name: "PrestaShop Behaviour Tracker",
-    version: "1.0.4",
+    version: "1.0.7",
     platform: "PrestaShop",
-    fileName: "behaviourtracker-prestashop-1.0.4.zip",
-    href: "/plugins/behaviourtracker-prestashop-1.0.4.zip",
+    fileName: "behaviourtracker-prestashop-1.0.7.zip",
+    href: "/plugins/behaviourtracker-prestashop-1.0.7.zip",
     size: "49 KB",
     sha256: "a72ed1cfe1b8d809ecf5d7d6c20b78ee5252060598ca0a8c9a667fb9c0bc6829",
     sourceUrl: "https://github.com/GalylioAI/Client-Behaviour-Project/tree/Prestashop_module",
@@ -162,7 +162,7 @@ export function DownloadsPage({ siteId }: { siteId?: string }) {
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline" className="border-blue-100 bg-blue-50 text-blue-700">
-                  WordPress 1.0.7 / PrestaShop 1.0.4
+                  WordPress 1.0.7 / PrestaShop 1.0.7
                 </Badge>
                 <Badge variant="outline" className="border-emerald-100 bg-emerald-50 text-emerald-700">
                   <Github className="h-3 w-3" />
