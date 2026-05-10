@@ -109,9 +109,10 @@ export async function POST(request: Request) {
 
     if (session && !tenantName) {
       const tenantRows = await clickhouseQuery<{ name: string }>(`
-        SELECT name
-        FROM tracer.tenants FINAL
+        SELECT argMax(name, updated_at) AS name
+        FROM tracer.tenants
         WHERE tenant_id = ${sqlString(tenantId)}
+        GROUP BY tenant_id
         LIMIT 1
       `)
       tenantName = String(tenantRows[0]?.name || "").trim()

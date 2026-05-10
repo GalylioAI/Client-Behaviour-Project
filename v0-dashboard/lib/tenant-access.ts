@@ -15,13 +15,15 @@ export async function loadTenantSites(tenantId: string): Promise<TenantSiteAcces
     SELECT
       site_id,
       tenant_id,
-      domain,
-      platform,
-      status
-    FROM tracer.sites FINAL
+      argMax(domain, updated_at) AS domain,
+      argMax(platform, updated_at) AS platform,
+      argMax(status, updated_at) AS status,
+      max(updated_at) AS latest_updated_at
+    FROM tracer.sites
     WHERE tenant_id = ${sqlString(tenantId)}
-      AND status = 'active'
-    ORDER BY updated_at DESC
+    GROUP BY site_id, tenant_id
+    HAVING status = 'active'
+    ORDER BY latest_updated_at DESC
     LIMIT 100
   `)
 
