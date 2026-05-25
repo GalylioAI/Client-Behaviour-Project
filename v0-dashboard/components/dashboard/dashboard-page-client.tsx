@@ -4210,10 +4210,10 @@ export function DashboardPageClient({
   const togglePageHeader = () => setIsPageHeaderOpen((value) => !value)
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <div className="min-h-screen bg-slate-50 text-slate-900 lg:h-screen lg:overflow-hidden">
       <div
         className={cn(
-          "grid min-h-screen transition-[grid-template-columns] duration-300 ease-out lg:grid-rows-[4rem_1fr]",
+          "grid min-h-screen transition-[grid-template-columns] duration-300 ease-out lg:h-screen lg:grid-rows-[4rem_1fr]",
           isSidebarOpen
             ? "lg:grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)_360px]"
             : "lg:grid-cols-[72px_minmax(0,1fr)] xl:grid-cols-[72px_minmax(0,1fr)_360px]"
@@ -4245,7 +4245,7 @@ export function DashboardPageClient({
           />
         </div>
 
-        <main className="min-w-0 lg:col-start-2 lg:row-start-2">
+        <main className="min-w-0 lg:col-start-2 lg:row-start-2 lg:h-[calc(100vh-4rem)] lg:overflow-y-auto">
           <div className="mx-auto max-w-[1440px] space-y-5 px-4 py-5 md:px-6">
             <section
               role="button"
