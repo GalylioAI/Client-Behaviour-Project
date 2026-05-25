@@ -1,5 +1,5 @@
 import { DashboardPageClient } from "@/components/dashboard/dashboard-page-client"
-import { requireSession } from "@/lib/auth"
+import { findUserByEmail, requireSession } from "@/lib/auth"
 import { loadInsights } from "@/lib/insights"
 import { loadTenantSites, resolveTenantSiteId } from "@/lib/tenant-access"
 
@@ -33,7 +33,10 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const session = await requireSession(next)
   const selectedSiteId = await resolveTenantSiteId(session.tenant_id, siteId)
   const sites = await loadTenantSites(session.tenant_id)
-  const insights = await loadInsights(selectedSiteId, { lookbackDays })
+  const [insights, user] = await Promise.all([
+    loadInsights(selectedSiteId, { lookbackDays }),
+    findUserByEmail(session.email),
+  ])
   return (
     <DashboardPageClient
       insights={insights}
@@ -43,6 +46,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       lookbackDays={lookbackDays}
       userEmail={session.email}
       userRole={session.role}
+      userFullName={user?.full_name || ""}
+      userAvatarUrl={user?.avatar_url || ""}
     />
   )
 }

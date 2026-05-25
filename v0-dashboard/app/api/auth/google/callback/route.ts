@@ -25,6 +25,7 @@ type GoogleUserInfo = {
   email?: string
   email_verified?: boolean
   name?: string
+  picture?: string
 }
 
 async function exchangeCode(request: Request, code: string) {
@@ -99,6 +100,7 @@ export async function GET(request: Request) {
       googleSub: profile.sub,
       email: profile.email,
       fullName: profile.name || "",
+      avatarUrl: profile.picture || "",
     })
 
     const response = NextResponse.redirect(new URL(parsedState.next || "/app", appBaseUrl(request)))

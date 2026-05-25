@@ -981,6 +981,7 @@ function topbarSearchActions(siteId: string, activeView: DashboardView, lookback
     { label: "Data Pipelines", description: "Analysis jobs, freshness, and data quality", keywords: "pipelines airflow analysis jobs data quality monitoring", href: appHrefForSite(siteId, "pipelines", lookbackDays) },
     { label: "API Keys", description: "Manage public write and private server keys", keywords: "api keys key token public private write secret", href: `/keys?site_id=${encodeURIComponent(siteId)}` },
     { label: "Setup", description: "Connect another website or inspect installation steps", keywords: "setup connect install plugin wordpress prestashop website", href: "/setup" },
+    { label: "Profile", description: "Edit your name, account avatar, and Google profile data", keywords: "profile account user avatar google name email", href: "/profile" },
   ]
   const needle = query.trim().toLowerCase()
   const rawMatches = needle
@@ -1003,6 +1004,8 @@ function Topbar({
   notifications,
   userEmail,
   userRole,
+  userFullName,
+  userAvatarUrl,
   isSidebarOpen,
   onToggleSidebar,
 }: {
@@ -1014,6 +1017,8 @@ function Topbar({
   notifications: TopbarNotification[]
   userEmail: string
   userRole: string
+  userFullName: string
+  userAvatarUrl: string
   isSidebarOpen: boolean
   onToggleSidebar: () => void
 }) {
@@ -1031,7 +1036,7 @@ function Topbar({
   )
   const lookbackLabel = LOOKBACK_OPTIONS.find((option) => option.days === lookbackDays)?.label || `Last ${lookbackDays} days`
   const hasWarning = notifications.some((notification) => notification.tone === "warning")
-  const accountLabel = userEmail ? userEmail.split("@")[0] : t("common.admin")
+  const accountLabel = userFullName || (userEmail ? userEmail.split("@")[0] : t("common.admin"))
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -1256,17 +1261,25 @@ function Topbar({
             onClick={() => setIsAccountMenuOpen((current) => !current)}
             className="flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 transition hover:border-blue-200 hover:bg-blue-50"
           >
-            <div className="grid h-5 w-5 place-items-center rounded-full bg-slate-900 text-[10px] font-semibold text-white">{initialsFromEmail(userEmail)}</div>
+            <div className="grid h-5 w-5 overflow-hidden rounded-full bg-slate-900 text-[10px] font-semibold text-white">
+              {userAvatarUrl ? (
+                <img src={userAvatarUrl} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+              ) : (
+                <span className="grid h-full w-full place-items-center">{initialsFromEmail(userFullName || userEmail)}</span>
+              )}
+            </div>
             <span className="max-w-24 truncate text-xs font-medium text-slate-700">{accountLabel}</span>
             <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform", isAccountMenuOpen && "rotate-180")} />
           </button>
           {isAccountMenuOpen ? (
             <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-64 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl shadow-slate-200/70">
               <div className="border-b border-slate-100 px-4 py-3">
-                <div className="truncate text-sm font-semibold text-slate-950">{userEmail || "Admin"}</div>
-                <div className="mt-0.5 text-xs capitalize text-slate-500">{userRole || "owner"}</div>
+                <div className="truncate text-sm font-semibold text-slate-950">{userFullName || userEmail || "Admin"}</div>
+                <div className="mt-0.5 truncate text-xs text-slate-500">{userEmail || "No email"}</div>
+                <div className="mt-0.5 text-xs capitalize text-slate-400">{userRole || "owner"}</div>
               </div>
               <div className="p-1">
+                <button type="button" onClick={() => navigate("/profile")} className="block w-full rounded-md px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50">Profile</button>
                 <button type="button" onClick={() => navigate(appHrefForSite(siteId, "sites", lookbackDays))} className="block w-full rounded-md px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50">Manage websites</button>
                 <button type="button" onClick={() => navigate(appHrefForSite(siteId, "settings", lookbackDays))} className="block w-full rounded-md px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50">Settings</button>
                 <button type="button" onClick={logout} className="block w-full rounded-md px-3 py-2 text-left text-sm font-medium text-red-600 transition hover:bg-red-50">Sign out</button>
@@ -4060,6 +4073,8 @@ export function DashboardPageClient({
   lookbackDays = 7,
   userEmail = "",
   userRole = "owner",
+  userFullName = "",
+  userAvatarUrl = "",
 }: {
   insights: BehaviorInsights
   initialView?: string
@@ -4068,6 +4083,8 @@ export function DashboardPageClient({
   lookbackDays?: number
   userEmail?: string
   userRole?: string
+  userFullName?: string
+  userAvatarUrl?: string
 }) {
   const { t } = useI18n()
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -4221,6 +4238,8 @@ export function DashboardPageClient({
             notifications={topbarNotifications}
             userEmail={userEmail}
             userRole={userRole}
+            userFullName={userFullName}
+            userAvatarUrl={userAvatarUrl}
             isSidebarOpen={isSidebarOpen}
             onToggleSidebar={() => setIsSidebarOpen((value) => !value)}
           />

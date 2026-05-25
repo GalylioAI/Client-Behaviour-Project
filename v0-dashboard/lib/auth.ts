@@ -29,6 +29,7 @@ export interface AuthUser {
   password_hash: string
   auth_provider?: string
   google_sub?: string
+  avatar_url?: string
 }
 
 export async function ensureAuthSchema() {
@@ -44,6 +45,7 @@ export async function ensureAuthSchema() {
       password_hash String DEFAULT '',
       auth_provider LowCardinality(String) DEFAULT 'password',
       google_sub    String DEFAULT '',
+      avatar_url    String DEFAULT '',
       created_at    DateTime64(3, 'UTC') DEFAULT now64(3),
       last_login_at Nullable(DateTime64(3, 'UTC')),
       updated_at    DateTime64(3, 'UTC') DEFAULT now64(3)
@@ -54,6 +56,7 @@ export async function ensureAuthSchema() {
   await clickhouseCommand("ALTER TABLE tracer.tenant_users ADD COLUMN IF NOT EXISTS password_hash String DEFAULT ''")
   await clickhouseCommand("ALTER TABLE tracer.tenant_users ADD COLUMN IF NOT EXISTS auth_provider LowCardinality(String) DEFAULT 'password'")
   await clickhouseCommand("ALTER TABLE tracer.tenant_users ADD COLUMN IF NOT EXISTS google_sub String DEFAULT ''")
+  await clickhouseCommand("ALTER TABLE tracer.tenant_users ADD COLUMN IF NOT EXISTS avatar_url String DEFAULT ''")
   await clickhouseCommand("ALTER TABLE tracer.tenant_users ADD COLUMN IF NOT EXISTS last_login_at Nullable(DateTime64(3, 'UTC'))")
 
   await clickhouseCommand(`
@@ -231,7 +234,8 @@ export async function findUserByEmail(email: string): Promise<AuthUser | null> {
       status,
       password_hash,
       auth_provider,
-      google_sub
+      google_sub,
+      avatar_url
     FROM tracer.tenant_users FINAL
     WHERE lower(email) = ${sqlString(email.toLowerCase())}
       AND status = 'active'
@@ -251,6 +255,7 @@ export async function findUserByEmail(email: string): Promise<AuthUser | null> {
         password_hash: str(row.password_hash),
         auth_provider: str(row.auth_provider, "password"),
         google_sub: str(row.google_sub),
+        avatar_url: str(row.avatar_url),
       }
     : null
 }
@@ -268,7 +273,8 @@ export async function findUserByGoogleSub(googleSub: string): Promise<AuthUser |
       status,
       password_hash,
       auth_provider,
-      google_sub
+      google_sub,
+      avatar_url
     FROM tracer.tenant_users FINAL
     WHERE google_sub = ${sqlString(googleSub)}
       AND status = 'active'
@@ -288,6 +294,7 @@ export async function findUserByGoogleSub(googleSub: string): Promise<AuthUser |
         password_hash: str(row.password_hash),
         auth_provider: str(row.auth_provider, "google"),
         google_sub: str(row.google_sub),
+        avatar_url: str(row.avatar_url),
       }
     : null
 }
@@ -296,6 +303,7 @@ export async function createOrUpdateGoogleUser(input: {
   googleSub: string
   email: string
   fullName: string
+  avatarUrl?: string
 }): Promise<AuthUser> {
   await ensureAuthSchema()
 
@@ -305,10 +313,11 @@ export async function createOrUpdateGoogleUser(input: {
   const tenantId = existingByEmail?.tenant_id || `tenant_${slugAuthValue(email.split("@")[1] || email)}`
   const userId = existingByEmail?.user_id || `user_${slugAuthValue(email)}`
   const fullName = input.fullName.trim() || existingByEmail?.full_name || email.split("@")[0] || "Owner"
+  const avatarUrl = input.avatarUrl?.trim() || existingByEmail?.avatar_url || ""
 
   await clickhouseCommand(`
     INSERT INTO tracer.tenant_users
-      (user_id, tenant_id, email, full_name, role, status, password_hash, auth_provider, google_sub, created_at, last_login_at, updated_at)
+      (user_id, tenant_id, email, full_name, role, status, password_hash, auth_provider, google_sub, avatar_url, created_at, last_login_at, updated_at)
     VALUES
       (
         ${sqlString(userId)},
@@ -320,6 +329,7 @@ export async function createOrUpdateGoogleUser(input: {
         ${sqlString(existingByEmail?.password_hash || "")},
         'google',
         ${sqlString(input.googleSub)},
+        ${sqlString(avatarUrl)},
         now64(3),
         now64(3),
         now64(3)
@@ -336,6 +346,41 @@ export async function createOrUpdateGoogleUser(input: {
     password_hash: existingByEmail?.password_hash || "",
     auth_provider: "google",
     google_sub: input.googleSub,
+    avatar_url: avatarUrl,
+  }
+}
+
+export async function updateUserProfile(user: AuthUser, input: { fullName: string; avatarUrl?: string }) {
+  await ensureAuthSchema()
+
+  const fullName = input.fullName.trim() || user.full_name || user.email.split("@")[0] || "Owner"
+  const avatarUrl = input.avatarUrl?.trim() || ""
+
+  await clickhouseCommand(`
+    INSERT INTO tracer.tenant_users
+      (user_id, tenant_id, email, full_name, role, status, password_hash, auth_provider, google_sub, avatar_url, created_at, last_login_at, updated_at)
+    VALUES
+      (
+        ${sqlString(user.user_id)},
+        ${sqlString(user.tenant_id)},
+        ${sqlString(user.email)},
+        ${sqlString(fullName)},
+        ${sqlString(user.role)},
+        ${sqlString(user.status)},
+        ${sqlString(user.password_hash || "")},
+        ${sqlString(user.auth_provider || "password")},
+        ${sqlString(user.google_sub || "")},
+        ${sqlString(avatarUrl)},
+        now64(3),
+        now64(3),
+        now64(3)
+      )
+  `)
+
+  return {
+    ...user,
+    full_name: fullName,
+    avatar_url: avatarUrl,
   }
 }
 
@@ -399,7 +444,7 @@ export async function updateUserPassword(user: AuthUser, password: string) {
   await ensureAuthSchema()
   await clickhouseCommand(`
     INSERT INTO tracer.tenant_users
-      (user_id, tenant_id, email, full_name, role, status, password_hash, auth_provider, google_sub, created_at, last_login_at, updated_at)
+      (user_id, tenant_id, email, full_name, role, status, password_hash, auth_provider, google_sub, avatar_url, created_at, last_login_at, updated_at)
     VALUES
       (
         ${sqlString(user.user_id)},
@@ -411,6 +456,7 @@ export async function updateUserPassword(user: AuthUser, password: string) {
         ${sqlString(hashPassword(password))},
         ${sqlString(user.auth_provider || "password")},
         ${sqlString(user.google_sub || "")},
+        ${sqlString(user.avatar_url || "")},
         now64(3),
         ${user.status === "active" ? "now64(3)" : "NULL"},
         now64(3)
@@ -419,9 +465,10 @@ export async function updateUserPassword(user: AuthUser, password: string) {
 }
 
 export async function markLogin(user: AuthUser) {
+  await ensureAuthSchema()
   await clickhouseCommand(`
     INSERT INTO tracer.tenant_users
-      (user_id, tenant_id, email, full_name, role, status, password_hash, auth_provider, google_sub, created_at, last_login_at, updated_at)
+      (user_id, tenant_id, email, full_name, role, status, password_hash, auth_provider, google_sub, avatar_url, created_at, last_login_at, updated_at)
     VALUES
       (
         ${sqlString(user.user_id)},
@@ -433,6 +480,7 @@ export async function markLogin(user: AuthUser) {
         ${sqlString(user.password_hash)},
         ${sqlString(user.auth_provider || "password")},
         ${sqlString(user.google_sub || "")},
+        ${sqlString(user.avatar_url || "")},
         now64(3),
         now64(3),
         now64(3)

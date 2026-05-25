@@ -165,7 +165,7 @@ export async function POST(request: Request) {
     if (!session) {
       await insertStatement(`
         INSERT INTO tracer.tenant_users
-          (user_id, tenant_id, email, full_name, role, status, password_hash, created_at, last_login_at, updated_at)
+          (user_id, tenant_id, email, full_name, role, status, password_hash, avatar_url, created_at, last_login_at, updated_at)
         VALUES
           (
             ${sqlString(userId)},
@@ -175,6 +175,7 @@ export async function POST(request: Request) {
             'owner',
             'active',
             ${sqlString(passwordHash)},
+            '',
             now64(3),
             now64(3),
             now64(3)
