@@ -352,8 +352,6 @@ type SalesBucket = {
   addToCart: number
 }
 
-type ComparisonStatus = "ok" | "missing" | "partial" | "low-baseline"
-
 const salesRanges: Array<{ id: SalesRange; label: string; buckets: number; compareLabel: string }> = [
   { id: "daily", label: "Daily", buckets: 14, compareLabel: "previous 14 days" },
   { id: "weekly", label: "Weekly", buckets: 8, compareLabel: "previous 8 weeks" },
@@ -372,27 +370,6 @@ function safeRate(numerator: number, denominator: number) {
 function pctChange(current: number, baseline: number) {
   if (!baseline) return current ? 100 : 0
   return ((current - baseline) / baseline) * 100
-}
-
-function comparisonStatus({
-  current,
-  baseline,
-  deltaPct,
-  currentBuckets,
-  baselineBuckets,
-  expectedBuckets,
-}: {
-  current: number
-  baseline: number
-  deltaPct: number
-  currentBuckets: number
-  baselineBuckets: number
-  expectedBuckets: number
-}): ComparisonStatus {
-  if (!baselineBuckets || !baseline) return current ? "missing" : "ok"
-  if (baselineBuckets < Math.max(2, Math.ceil(Math.min(currentBuckets || expectedBuckets, expectedBuckets) * 0.75))) return "partial"
-  if (Math.abs(deltaPct) >= 200 && Math.abs(baseline) < Math.max(Math.abs(current) * 0.35, 1)) return "low-baseline"
-  return "ok"
 }
 
 function trendTone(deltaPct: number, positiveWhenUp: boolean): PulseTone {
@@ -506,7 +483,6 @@ function buildSalesView(insights: BehaviorInsights, range: SalesRange) {
   const previous = buckets.slice(-(rangeConfig.buckets * 2), -rangeConfig.buckets)
   const currentTotals = sumSales(current)
   const previousTotals = sumSales(previous)
-  const revenueDelta = pctChange(currentTotals.revenue, previousTotals.revenue)
   const currentCr = safeRate(currentTotals.purchases, currentTotals.sessions)
   const previousCr = safeRate(previousTotals.purchases, previousTotals.sessions)
   const currentAov = currentTotals.purchases ? currentTotals.revenue / currentTotals.purchases : 0
@@ -520,17 +496,7 @@ function buildSalesView(insights: BehaviorInsights, range: SalesRange) {
     points: current.map((row) => ({ ...row, average: avgRevenue })),
     totals: currentTotals,
     comparison: previousTotals,
-    currentBuckets: current.length,
-    previousBuckets: previous.length,
-    revenueDelta,
-    revenueComparisonStatus: comparisonStatus({
-      current: currentTotals.revenue,
-      baseline: previousTotals.revenue,
-      deltaPct: revenueDelta,
-      currentBuckets: current.length,
-      baselineBuckets: previous.length,
-      expectedBuckets: rangeConfig.buckets,
-    }),
+    revenueDelta: pctChange(currentTotals.revenue, previousTotals.revenue),
     conversionRate: currentCr,
     conversionDelta: pctChange(currentCr, previousCr),
     averageOrderValue: currentAov,
@@ -1089,16 +1055,12 @@ function MovementBadge({
   delta,
   positiveWhenUp = true,
   compact = false,
-  label,
-  forceTone,
 }: {
   delta: number
   positiveWhenUp?: boolean
   compact?: boolean
-  label?: string
-  forceTone?: PulseTone
 }) {
-  const tone = forceTone || trendTone(delta, positiveWhenUp)
+  const tone = trendTone(delta, positiveWhenUp)
   const isDown = delta < -0.5
   const Icon = isDown ? TrendingDown : TrendingUp
   return (
@@ -1112,7 +1074,7 @@ function MovementBadge({
       )}
     >
       <Icon className={cn(compact ? "h-3.5 w-3.5" : "h-4 w-4", Math.abs(delta) < 0.5 && "rotate-45")} />
-      {label || formatSignedPct(delta)}
+      {formatSignedPct(delta)}
     </span>
   )
 }
@@ -1157,21 +1119,6 @@ function SalesPerformanceSection({ insights }: { insights: BehaviorInsights }) {
   const [range, setRange] = useState<SalesRange>("daily")
   const sales = useMemo(() => buildSalesView(insights, range), [insights, range])
   const hasRevenue = sales.totals.revenue > 0
-  const revenueComparisonLabel =
-    sales.revenueComparisonStatus === "ok"
-      ? undefined
-      : sales.revenueComparisonStatus === "low-baseline"
-        ? tr("Low baseline")
-        : sales.revenueComparisonStatus === "partial"
-          ? tr("Partial baseline")
-          : tr("No baseline")
-  const revenueComparisonText = hasRevenue
-    ? sales.revenueComparisonStatus === "ok"
-      ? `${tr("Compared with the")} ${tr(sales.rangeConfig.compareLabel)} · ${tr("Previous")}: ${fmtMoneyAmount(sales.comparison.revenue)}`
-      : sales.revenueComparisonStatus === "missing"
-        ? tr("No previous revenue baseline is available yet.")
-        : `${tr("Previous")}: ${fmtMoneyAmount(sales.comparison.revenue)} · ${tr("Percent hidden because the previous baseline is too small or incomplete.")}`
-    : tr("Waiting for purchase events with order totals")
   const lifecycleLosses = insights.business_overview.sales.cancelled_orders +
     insights.business_overview.sales.refunded_orders +
     insights.business_overview.sales.failed_orders
@@ -1205,14 +1152,10 @@ function SalesPerformanceSection({ insights }: { insights: BehaviorInsights }) {
           <div className="text-4xl font-semibold tracking-tight text-slate-950 md:text-5xl">
             {fmtMoneyAmount(sales.totals.revenue)}
           </div>
-          <MovementBadge
-            delta={sales.revenueDelta}
-            label={revenueComparisonLabel}
-            forceTone={revenueComparisonLabel ? "neutral" : undefined}
-          />
+          <MovementBadge delta={sales.revenueDelta} />
         </div>
         <div className="mt-2 text-xs font-medium text-slate-500">
-          {revenueComparisonText}
+          {hasRevenue ? `${tr("Compared with the")} ${tr(sales.rangeConfig.compareLabel)}` : tr("Waiting for purchase events with order totals")}
         </div>
 
         <div className="mt-6 h-[320px]">
