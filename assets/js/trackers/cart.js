@@ -11,6 +11,36 @@ const BehaviourTrackerCart = {
         this.trackCartInteractions();
     },
 
+    cleanText: function (value) {
+        return (value || '').toString().replace(/\s+/g, ' ').trim();
+    },
+
+    productNameFromUrl: function (url) {
+        if (!url) return '';
+        try {
+            const parsed = new URL(url, window.location.origin);
+            return this.cleanText(decodeURIComponent(parsed.pathname.split('/').filter(Boolean).pop() || '').replace(/[-_]+/g, ' '));
+        } catch (e) {
+            return '';
+        }
+    },
+
+    getProductUrlFromElement: function (element) {
+        if (document.body.classList.contains('single-product')) {
+            return document.querySelector('link[rel="canonical"]')?.href || window.location.href;
+        }
+        const link = element?.querySelector?.('.woocommerce-loop-product__link[href], a.woocommerce-LoopProduct-link[href], a[href]');
+        return link?.href || '';
+    },
+
+    getProductNameFromElement: function (element, productUrl) {
+        const text = element?.querySelector?.('.product_title, h1, h2, h3, .woocommerce-loop-product__title')?.innerText;
+        const attr = element?.getAttribute?.('data-product_name') ||
+            element?.querySelector?.('a[title]')?.getAttribute('title') ||
+            element?.querySelector?.('img[alt]')?.getAttribute('alt');
+        return this.cleanText(attr || text) || this.productNameFromUrl(productUrl);
+    },
+
     /**
      * Track Cart Page View
      */
@@ -80,10 +110,9 @@ const BehaviourTrackerCart = {
             form?.querySelector('[name="product_id"]')?.value ||
             form?.querySelector('[name="variation_id"]')?.value ||
             element?.closest('[data-product_id]')?.getAttribute('data-product_id');
-        const productName = element?.getAttribute('data-product_name') ||
-            element?.closest('.product')?.querySelector('.product_title, h1, h2, h3')?.innerText ||
-            document.querySelector('.product_title')?.innerText ||
-            document.querySelector('h1')?.innerText;
+        const productElement = element?.closest('.product, .single-product') || document;
+        const productUrl = this.getProductUrlFromElement(productElement);
+        const productName = element?.getAttribute('data-product_name') || this.getProductNameFromElement(productElement, productUrl);
         const quantity = element?.getAttribute('data-quantity') ||
             form?.querySelector('[name="quantity"]')?.value ||
             1;
@@ -100,6 +129,7 @@ const BehaviourTrackerCart = {
             customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
             product_id: productId,
             product_name: productName,
+            product_url: productUrl,
             quantity_added: parseInt(quantity),
             source: document.body.classList.contains('single-product') ? 'product_page' : 'product_list'
         };

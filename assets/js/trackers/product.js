@@ -10,6 +10,93 @@ const BehaviourTrackerProduct = {
         this.initAdvancedTracking();
     },
 
+    cleanText: function (value) {
+        return (value || '').toString().replace(/\s+/g, ' ').trim();
+    },
+
+    textFromSelector: function (root, selectors) {
+        const scope = root || document;
+        for (const selector of selectors) {
+            const element = scope.querySelector(selector);
+            const text = this.cleanText(element?.innerText || element?.textContent || element?.getAttribute('content'));
+            if (text) return text;
+        }
+        return '';
+    },
+
+    metaContent: function (selectors) {
+        for (const selector of selectors) {
+            const value = this.cleanText(document.querySelector(selector)?.getAttribute('content'));
+            if (value) return value;
+        }
+        return '';
+    },
+
+    productNameFromUrl: function (url) {
+        if (!url) return '';
+        try {
+            const parsed = new URL(url, window.location.origin);
+            const segment = decodeURIComponent(parsed.pathname.split('/').filter(Boolean).pop() || '');
+            return this.cleanText(segment.replace(/[-_]+/g, ' '));
+        } catch (e) {
+            return '';
+        }
+    },
+
+    getProductUrlFromElement: function (element) {
+        if (!element) return '';
+        const link = element.matches?.('a[href]') ? element : element.querySelector(
+            '.woocommerce-loop-product__link[href], a.woocommerce-LoopProduct-link[href], a[href]'
+        );
+        const href = link?.href || element.closest?.('a[href]')?.href || '';
+        return href && !href.startsWith('javascript:') ? href : '';
+    },
+
+    getProductNameFromElement: function (element) {
+        if (!element) return '';
+        const text = this.textFromSelector(element, [
+            '.product_title',
+            'h1.entry-title',
+            '.woocommerce-loop-product__title',
+            '[itemprop="name"]',
+            'h2',
+            'h3',
+            'a[title]'
+        ]);
+        if (text) return text;
+
+        const title = this.cleanText((element.getAttribute ? element.getAttribute('data-product_name') : '') ||
+            (element.getAttribute ? element.getAttribute('data-name') : '') ||
+            element.querySelector('a[title]')?.getAttribute('title') ||
+            element.querySelector('img[alt]')?.getAttribute('alt'));
+        if (title) return title;
+
+        return this.productNameFromUrl(this.getProductUrlFromElement(element));
+    },
+
+    getCurrentProductName: function (productContainer) {
+        const text = this.getProductNameFromElement(productContainer || document);
+        if (text) return text;
+
+        const meta = this.metaContent([
+            'meta[property="og:title"]',
+            'meta[name="twitter:title"]',
+            'meta[name="title"]'
+        ]);
+        if (meta) return meta.replace(/\s*[|-]\s*[^|-]+$/, '').trim();
+
+        const title = this.cleanText(document.title);
+        if (title) return title.replace(/\s*[|-]\s*[^|-]+$/, '').trim();
+
+        return this.productNameFromUrl(window.location.href);
+    },
+
+    getCurrentProductUrl: function () {
+        return this.metaContent(['meta[property="og:url"]']) ||
+            document.querySelector('link[rel="canonical"]')?.href ||
+            window.location.href;
+    },
+
     /**
      * Track Product View
      * (Detects WooCommerce product pages)
@@ -31,9 +118,10 @@ const BehaviourTrackerProduct = {
 
         // Extract product data from WooCommerce
         const productId = this.getProductId();
-        const name = document.querySelector('.product_title, h1.entry-title')?.innerText;
+        const name = this.getCurrentProductName(productContainer);
         const priceElement = document.querySelector('.price .woocommerce-Price-amount, .price ins .amount, .price .amount');
         const price = priceElement ? this.extractPrice(priceElement.innerText) : null;
+        const productUrl = this.getCurrentProductUrl();
 
         // Get category from breadcrumbs or body classes
         const category = this.getProductCategory();
@@ -48,6 +136,7 @@ const BehaviourTrackerProduct = {
             product_name: name,
             product_price: price,
             product_category: category,
+            product_url: productUrl,
             page_url: window.location.href
         };
 
@@ -76,13 +165,14 @@ const BehaviourTrackerProduct = {
         products.forEach((el, index) => {
             const id = el.getAttribute('data-product_id') ||
                 el.querySelector('[data-product_id]')?.getAttribute('data-product_id');
-            const nameEl = el.querySelector('.woocommerce-loop-product__title, h2, h3');
-            const name = nameEl ? nameEl.innerText : null;
+            const name = this.getProductNameFromElement(el);
+            const productUrl = this.getProductUrlFromElement(el);
 
-            if (id) {
+            if (id || name || productUrl) {
                 productList.push({
                     product_id: id,
                     product_name: name,
+                    product_url: productUrl,
                     position: index + 1
                 });
             }
@@ -118,8 +208,9 @@ const BehaviourTrackerProduct = {
         // Check Config
         if (typeof bt_config !== 'undefined' && bt_config.BT_EVENT_PRODUCT_QUICK_VIEW == '0') return;
 
-        const productId = el.getAttribute('data-product_id') ||
-            el.closest('[data-product_id]')?.getAttribute('data-product_id');
+        const productElement = el.closest('.product, [data-product_id]') || el;
+        const productId = productElement.getAttribute('data-product_id') ||
+            productElement.closest('[data-product_id]')?.getAttribute('data-product_id');
 
         const data = {
             event: 'product_quick_view',
@@ -127,7 +218,9 @@ const BehaviourTrackerProduct = {
             timestamp: new Date().toISOString(),
             session_id: BehaviourTrackerSession.getOrCreateSessionId(),
             customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
-            product_id: productId
+            product_id: productId,
+            product_name: this.getProductNameFromElement(productElement),
+            product_url: this.getProductUrlFromElement(productElement)
         };
         this.sendData(data);
     },
@@ -141,13 +234,16 @@ const BehaviourTrackerProduct = {
             const zoomBtn = e.target.closest('.woocommerce-product-gallery__trigger, [class*="zoom"]');
             if (zoomBtn) {
                 const productId = this.getProductId();
+                const productContainer = document.querySelector('.product, .single-product');
                 const data = {
                     event: 'product_zoom',
                     event_type: 'PRODUCT DISCOVERY EVENTS',
                     timestamp: new Date().toISOString(),
                     session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                     customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
-                    product_id: productId
+                    product_id: productId,
+                    product_name: this.getCurrentProductName(productContainer),
+                    product_url: this.getCurrentProductUrl()
                 };
                 this.sendData(data);
             }
@@ -158,13 +254,16 @@ const BehaviourTrackerProduct = {
             const reviewTab = e.target.closest('[href="#reviews"], .reviews_tab, [href="#tab-reviews"]');
             if (reviewTab) {
                 const productId = this.getProductId();
+                const productContainer = document.querySelector('.product, .single-product');
                 const data = {
                     event: 'product_review_read',
                     event_type: 'PRODUCT DISCOVERY EVENTS',
                     timestamp: new Date().toISOString(),
                     session_id: BehaviourTrackerSession.getOrCreateSessionId(),
                     customer_id: (typeof bt_customer_id !== 'undefined') ? bt_customer_id : 'guest',
-                    product_id: productId
+                    product_id: productId,
+                    product_name: this.getCurrentProductName(productContainer),
+                    product_url: this.getCurrentProductUrl()
                 };
                 this.sendData(data);
             }
