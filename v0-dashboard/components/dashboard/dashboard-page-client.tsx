@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   Activity,
   AlertTriangle,
@@ -80,6 +81,13 @@ const chartColors = ["#1769E8", "#14B8A6", "#6366F1", "#F59E0B", "#EF4444", "#64
 const SIDEBAR_STORAGE_KEY = "behaviourai:sidebar-open"
 const PAGE_HEADER_STORAGE_KEY = "behaviourai:page-header-open"
 const AUTOMATION_INTENSITY_STORAGE_KEY = "behaviourai:automation-intensity"
+const LOOKBACK_OPTIONS = [
+  { label: "Today", days: 1 },
+  { label: "Last 7 days", days: 7 },
+  { label: "Last 14 days", days: 14 },
+  { label: "Last 30 days", days: 30 },
+  { label: "Last 90 days", days: 90 },
+]
 
 type DashboardView =
   | "overview"
@@ -104,6 +112,14 @@ type LiveAiInsightBundle = {
   model: string
   data_as_of: string
   error?: string
+}
+
+type TopbarNotification = {
+  id: string
+  title: string
+  description: string
+  tone: "healthy" | "warning" | "info"
+  href?: string
 }
 
 const viewMeta: Record<DashboardView, { title: string; description: string }> = {
@@ -672,18 +688,24 @@ function platformDisplayName(platform: string) {
   return platform || "Website"
 }
 
-function appHrefForSite(siteId: string, view: DashboardView) {
-  return siteId ? `/app?site_id=${encodeURIComponent(siteId)}&view=${encodeURIComponent(view)}` : `/app?view=${encodeURIComponent(view)}`
+function appHrefForSite(siteId: string, view: DashboardView, lookbackDays?: number) {
+  const params = new URLSearchParams()
+  if (siteId) params.set("site_id", siteId)
+  params.set("view", view)
+  if (lookbackDays) params.set("days", String(lookbackDays))
+  return `/app?${params.toString()}`
 }
 
 function SiteSelector({
   sites,
   currentSite,
   activeView,
+  lookbackDays,
 }: {
   sites: DashboardSite[]
   currentSite: DashboardSite
   activeView: DashboardView
+  lookbackDays?: number
 }) {
   const { t } = useI18n()
   const [isOpen, setIsOpen] = useState(false)
@@ -722,7 +744,7 @@ function SiteSelector({
               return (
                 <Link
                   key={site.site_id}
-                  href={appHrefForSite(site.site_id, activeView)}
+                  href={appHrefForSite(site.site_id, activeView, lookbackDays)}
                   onClick={() => setIsOpen(false)}
                   className={cn(
                     "flex items-center gap-3 rounded-md px-2.5 py-2 text-sm transition",
@@ -778,18 +800,20 @@ function Sidebar({
   currentSite,
   activeView,
   isCollapsed,
+  lookbackDays,
   onToggleSidebar,
 }: {
   sites: DashboardSite[]
   currentSite: DashboardSite
   activeView: DashboardView
   isCollapsed: boolean
+  lookbackDays?: number
   onToggleSidebar: () => void
 }) {
   const { t } = useI18n()
   const siteId = currentSite.site_id || sites[0]?.site_id || ""
   const siteQuery = siteId ? `?site_id=${encodeURIComponent(siteId)}` : ""
-  const appHref = (view: DashboardView) => appHrefForSite(siteId, view)
+  const appHref = (view: DashboardView) => appHrefForSite(siteId, view, lookbackDays)
   const renderNavItem = (item: { label: string; icon: typeof Activity; view?: DashboardView; href?: string }, compact = false) => {
     const isActive = item.view === activeView
     const Icon = item.icon
@@ -846,7 +870,7 @@ function Sidebar({
             <Globe2 className="h-4 w-4" />
           </Link>
         ) : (
-          <SiteSelector sites={sites} currentSite={currentSite} activeView={activeView} />
+          <SiteSelector sites={sites} currentSite={currentSite} activeView={activeView} lookbackDays={lookbackDays} />
         )}
       </div>
 
@@ -879,23 +903,152 @@ function Sidebar({
   )
 }
 
+function minutesSince(value: string | null | undefined) {
+  if (!value) return Number.POSITIVE_INFINITY
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return Number.POSITIVE_INFINITY
+  return Math.max(0, Math.round((Date.now() - date.getTime()) / 60000))
+}
+
+function initialsFromEmail(email: string) {
+  const clean = email.trim()
+  if (!clean) return "AD"
+  const [name] = clean.split("@")
+  return name
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || clean.slice(0, 2).toUpperCase()
+}
+
+function buildTopbarNotifications(insights: BehaviorInsights, siteId: string): TopbarNotification[] {
+  const latestEvent = insights.operations.recent_events[0]?.received_at || insights.dataset.date_range_utc.max
+  const latestRun = insights.operations.analysis_runs[0]
+  const publicKeys = insights.operations.keys.filter((key) => key.key_type === "public_write" && key.status === "active")
+  const secretKeys = insights.operations.keys.filter((key) => key.key_type === "server_secret" && key.status === "active")
+  const staleMinutes = minutesSince(latestEvent)
+  const notifications: TopbarNotification[] = []
+
+  notifications.push({
+    id: "freshness",
+    title: staleMinutes > 120 ? "Data looks stale" : "Data is receiving",
+    description: `Latest accepted event: ${timeAgo(latestEvent)}.`,
+    tone: staleMinutes > 120 ? "warning" : "healthy",
+    href: appHrefForSite(siteId, "live"),
+  })
+
+  if (latestRun) {
+    notifications.push({
+      id: "analysis",
+      title: latestRun.status === "success" ? "Insights refreshed" : "Analysis needs attention",
+      description: `${cleanLabel(latestRun.pipeline)} wrote ${fmtInt(latestRun.rows_written)} rows ${timeAgo(latestRun.updated_at)}.`,
+      tone: latestRun.status === "success" ? "healthy" : "warning",
+      href: appHrefForSite(siteId, "pipelines"),
+    })
+  }
+
+  notifications.push({
+    id: "keys",
+    title: publicKeys.length && secretKeys.length ? "Keys are active" : "Key setup incomplete",
+    description: `${publicKeys.length} public write key and ${secretKeys.length} private server key active.`,
+    tone: publicKeys.length && secretKeys.length ? "healthy" : "warning",
+    href: `/keys?site_id=${encodeURIComponent(siteId)}`,
+  })
+
+  if (insights.recommendations.prepared_emails > 0) {
+    notifications.push({
+      id: "emails",
+      title: "Recommendation drafts ready",
+      description: `${fmtInt(insights.recommendations.prepared_emails)} prepared emails waiting in the outbox.`,
+      tone: "info",
+      href: `/emails?site_id=${encodeURIComponent(siteId)}`,
+    })
+  }
+
+  return notifications
+}
+
+function topbarSearchActions(siteId: string, activeView: DashboardView, lookbackDays: number, query: string) {
+  const entries = [
+    { label: "Dashboard", description: "Business performance, revenue, pulse, and summary", keywords: "dashboard overview business revenue sales performance", href: appHrefForSite(siteId, "overview", lookbackDays) },
+    { label: "Live Events", description: "Raw event stream and tracker debugging", keywords: "live events raw tracker debug logs receiving", href: appHrefForSite(siteId, "live", lookbackDays) },
+    { label: "Funnels", description: "Product, cart, checkout, and purchase drop-offs", keywords: "funnels conversion checkout cart purchase drop off", href: appHrefForSite(siteId, "funnels", lookbackDays) },
+    { label: "Traffic And Audience", description: "Channels, referrers, campaigns, devices, and users", keywords: "traffic audience users visitors referrers campaigns channels devices", href: appHrefForSite(siteId, "audience", lookbackDays) },
+    { label: "Products", description: "Product engagement, views, clicks, and add-to-cart signals", keywords: "products product views clicks add to cart engagement merchandise", href: appHrefForSite(siteId, "products", lookbackDays) },
+    { label: "Purchase Intent", description: "Intent scores, high-value sessions, and reasons", keywords: "intent score scoring high medium low customers sessions ml", href: appHrefForSite(siteId, "smart-intent", lookbackDays) },
+    { label: "Recommendations", description: "Recommendation candidates and customer email drafts", keywords: "recommendations email drafts outbox smart actions", href: appHrefForSite(siteId, "smart-recommendations", lookbackDays) },
+    { label: "Data Pipelines", description: "Analysis jobs, freshness, and data quality", keywords: "pipelines airflow analysis jobs data quality monitoring", href: appHrefForSite(siteId, "pipelines", lookbackDays) },
+    { label: "API Keys", description: "Manage public write and private server keys", keywords: "api keys key token public private write secret", href: `/keys?site_id=${encodeURIComponent(siteId)}` },
+    { label: "Setup", description: "Connect another website or inspect installation steps", keywords: "setup connect install plugin wordpress prestashop website", href: "/setup" },
+  ]
+  const needle = query.trim().toLowerCase()
+  const rawMatches = needle
+    ? entries.filter((entry) => `${entry.label} ${entry.description} ${entry.keywords}`.toLowerCase().includes(needle))
+    : entries.filter((entry) => entry.href.includes(`view=${activeView}`)).concat(entries).slice(0, 6)
+  const seen = new Set<string>()
+  return rawMatches.filter((entry) => {
+    if (seen.has(entry.href)) return false
+    seen.add(entry.href)
+    return true
+  }).slice(0, 6)
+}
+
 function Topbar({
   siteLabel,
   siteId,
   latestEvent,
+  activeView,
+  lookbackDays,
+  notifications,
+  userEmail,
+  userRole,
   isSidebarOpen,
   onToggleSidebar,
 }: {
   siteLabel: string
   siteId: string
   latestEvent: string | null
+  activeView: DashboardView
+  lookbackDays: number
+  notifications: TopbarNotification[]
+  userEmail: string
+  userRole: string
   isSidebarOpen: boolean
   onToggleSidebar: () => void
 }) {
   const { t } = useI18n()
+  const router = useRouter()
+  const [searchQuery, setSearchQuery] = useState("")
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [isDateMenuOpen, setIsDateMenuOpen] = useState(false)
+  const [isNotificationMenuOpen, setIsNotificationMenuOpen] = useState(false)
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false)
+  const searchActions = useMemo(
+    () => topbarSearchActions(siteId, activeView, lookbackDays, searchQuery),
+    [activeView, lookbackDays, searchQuery, siteId]
+  )
+  const lookbackLabel = LOOKBACK_OPTIONS.find((option) => option.days === lookbackDays)?.label || `Last ${lookbackDays} days`
+  const hasWarning = notifications.some((notification) => notification.tone === "warning")
+  const accountLabel = userEmail ? userEmail.split("@")[0] : t("common.admin")
+
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" })
     window.location.href = "/login"
+  }
+
+  function navigate(href: string) {
+    setIsSearchOpen(false)
+    setIsDateMenuOpen(false)
+    setIsNotificationMenuOpen(false)
+    setIsAccountMenuOpen(false)
+    router.push(href)
+  }
+
+  function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const first = searchActions[0]
+    if (first) navigate(first.href)
   }
 
   return (
@@ -922,11 +1075,51 @@ function Topbar({
         </div>
       </div>
 
-      <div className="hidden h-9 min-w-[280px] max-w-[420px] flex-1 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 lg:flex">
-        <Search className="h-4 w-4 text-slate-400" />
-        <span className="text-sm text-slate-500">{t("common.searchPlaceholder")}</span>
-        <kbd className="ml-auto rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] font-medium text-slate-400">⌘K</kbd>
-      </div>
+      <form
+        onSubmit={handleSearchSubmit}
+        className="relative hidden min-w-[280px] max-w-[420px] flex-1 lg:block"
+      >
+        <div className="flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 transition focus-within:border-blue-300 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-100">
+          <Search className="h-4 w-4 text-slate-400" />
+          <input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            onFocus={() => setIsSearchOpen(true)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setIsSearchOpen(false)
+                setSearchQuery("")
+              }
+            }}
+            className="min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-500"
+            placeholder={t("common.searchPlaceholder")}
+          />
+          <kbd className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] font-medium text-slate-400">Enter</kbd>
+        </div>
+        {isSearchOpen ? (
+          <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl shadow-slate-200/70">
+            <div className="border-b border-slate-100 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              Go to
+            </div>
+            <div className="p-1">
+              {searchActions.length ? searchActions.map((action) => (
+                <button
+                  key={action.href}
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => navigate(action.href)}
+                  className="block w-full rounded-md px-3 py-2 text-left transition hover:bg-blue-50"
+                >
+                  <span className="block text-sm font-semibold text-slate-900">{action.label}</span>
+                  <span className="mt-0.5 block truncate text-xs text-slate-500">{action.description}</span>
+                </button>
+              )) : (
+                <div className="px-3 py-4 text-sm text-slate-500">No matching page found.</div>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </form>
 
       <div className="flex items-center gap-2">
         <Button asChild variant="outline" size="sm" className="hidden border-slate-200 bg-white text-slate-700 md:inline-flex">
@@ -947,16 +1140,104 @@ function Topbar({
             {t("common.debug")}
           </Link>
         </Button>
-        <Button variant="outline" size="sm" className="hidden border-slate-200 bg-white text-slate-700 md:inline-flex">
-          <CalendarDays className="h-4 w-4" />
-          {t("common.last7Days")}
-        </Button>
-        <Button variant="ghost" size="icon-sm" className="text-slate-500">
-          <Bell className="h-4 w-4" />
-        </Button>
-        <div className="hidden h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 md:flex">
-          <div className="grid h-5 w-5 place-items-center rounded-full bg-slate-900 text-[10px] font-semibold text-white">IS</div>
-          <span className="text-xs font-medium text-slate-700">{t("common.admin")}</span>
+        <div className="relative hidden md:block">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-slate-200 bg-white text-slate-700"
+            onClick={() => setIsDateMenuOpen((current) => !current)}
+          >
+            <CalendarDays className="h-4 w-4" />
+            {lookbackLabel}
+            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", isDateMenuOpen && "rotate-180")} />
+          </Button>
+          {isDateMenuOpen ? (
+            <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-44 overflow-hidden rounded-lg border border-slate-200 bg-white p-1 shadow-xl shadow-slate-200/70">
+              {LOOKBACK_OPTIONS.map((option) => (
+                <button
+                  key={option.days}
+                  type="button"
+                  onClick={() => navigate(appHrefForSite(siteId, activeView, option.days))}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-md px-3 py-2 text-sm transition hover:bg-blue-50",
+                    lookbackDays === option.days ? "font-semibold text-blue-700" : "text-slate-700"
+                  )}
+                >
+                  {option.label}
+                  {lookbackDays === option.days ? <span className="h-1.5 w-1.5 rounded-full bg-blue-600" /> : null}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+        <div className="relative">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="relative text-slate-500"
+            onClick={() => setIsNotificationMenuOpen((current) => !current)}
+            aria-label="Notifications"
+          >
+            <Bell className="h-4 w-4" />
+            {hasWarning ? <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" /> : null}
+          </Button>
+          {isNotificationMenuOpen ? (
+            <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-80 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl shadow-slate-200/70">
+              <div className="border-b border-slate-100 px-4 py-3">
+                <div className="text-sm font-semibold text-slate-950">Notifications</div>
+                <div className="mt-0.5 text-xs text-slate-500">Live operational status for this website.</div>
+              </div>
+              <div className="max-h-80 overflow-y-auto p-1">
+                {notifications.map((notification) => (
+                  <button
+                    key={notification.id}
+                    type="button"
+                    onClick={() => notification.href && navigate(notification.href)}
+                    className="flex w-full gap-3 rounded-md px-3 py-2.5 text-left transition hover:bg-slate-50"
+                  >
+                    <span
+                      className={cn(
+                        "mt-1 h-2 w-2 shrink-0 rounded-full",
+                        notification.tone === "healthy" && "bg-emerald-500",
+                        notification.tone === "warning" && "bg-red-500",
+                        notification.tone === "info" && "bg-blue-500"
+                      )}
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-slate-900">{notification.title}</span>
+                      <span className="mt-0.5 block text-xs leading-5 text-slate-500">{notification.description}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+        <div className="relative hidden md:block">
+          <button
+            type="button"
+            onClick={() => setIsAccountMenuOpen((current) => !current)}
+            className="flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 transition hover:border-blue-200 hover:bg-blue-50"
+          >
+            <div className="grid h-5 w-5 place-items-center rounded-full bg-slate-900 text-[10px] font-semibold text-white">{initialsFromEmail(userEmail)}</div>
+            <span className="max-w-24 truncate text-xs font-medium text-slate-700">{accountLabel}</span>
+            <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform", isAccountMenuOpen && "rotate-180")} />
+          </button>
+          {isAccountMenuOpen ? (
+            <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-64 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl shadow-slate-200/70">
+              <div className="border-b border-slate-100 px-4 py-3">
+                <div className="truncate text-sm font-semibold text-slate-950">{userEmail || "Admin"}</div>
+                <div className="mt-0.5 text-xs capitalize text-slate-500">{userRole || "owner"}</div>
+              </div>
+              <div className="p-1">
+                <button type="button" onClick={() => navigate(appHrefForSite(siteId, "sites", lookbackDays))} className="block w-full rounded-md px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50">Manage websites</button>
+                <button type="button" onClick={() => navigate(appHrefForSite(siteId, "settings", lookbackDays))} className="block w-full rounded-md px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50">Settings</button>
+                <button type="button" onClick={logout} className="block w-full rounded-md px-3 py-2 text-left text-sm font-medium text-red-600 transition hover:bg-red-50">Sign out</button>
+              </div>
+            </div>
+          ) : null}
         </div>
         <LanguageSwitcher compact />
         <Button type="button" variant="ghost" size="icon-sm" className="text-slate-500" onClick={logout}>
@@ -3741,11 +4022,17 @@ export function DashboardPageClient({
   initialView,
   sites = [],
   selectedSiteId,
+  lookbackDays = 7,
+  userEmail = "",
+  userRole = "owner",
 }: {
   insights: BehaviorInsights
   initialView?: string
   sites?: DashboardSite[]
   selectedSiteId?: string
+  lookbackDays?: number
+  userEmail?: string
+  userRole?: string
 }) {
   const { t } = useI18n()
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -3776,6 +4063,7 @@ export function DashboardPageClient({
   const selectedSidebarSite = sidebarSites.find((item) => item.site_id === (selectedSiteId || currentSite.site_id)) || currentSite
   const activeSiteId = site.site_id || selectedSiteId || selectedSidebarSite.site_id || "tdiscount"
   const latestEvent = insights.operations.recent_events[0]?.received_at || insights.dataset.date_range_utc.max
+  const topbarNotifications = useMemo(() => buildTopbarNotifications(insights, activeSiteId), [activeSiteId, insights])
 
   const overviewTrend = insights.daily_trends.map((row) => ({
     date: row.date.slice(5),
@@ -3884,6 +4172,7 @@ export function DashboardPageClient({
           currentSite={selectedSidebarSite}
           activeView={activeView}
           isCollapsed={!isSidebarOpen}
+          lookbackDays={lookbackDays}
           onToggleSidebar={() => setIsSidebarOpen((value) => !value)}
         />
 
@@ -3892,6 +4181,11 @@ export function DashboardPageClient({
             siteLabel={site.domain || site.site_id || "tdiscount"}
             siteId={site.site_id || "tdiscount"}
             latestEvent={latestEvent}
+            activeView={activeView}
+            lookbackDays={lookbackDays}
+            notifications={topbarNotifications}
+            userEmail={userEmail}
+            userRole={userRole}
             isSidebarOpen={isSidebarOpen}
             onToggleSidebar={() => setIsSidebarOpen((value) => !value)}
           />

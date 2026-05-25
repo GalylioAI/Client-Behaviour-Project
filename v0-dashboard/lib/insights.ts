@@ -389,8 +389,8 @@ function getSiteId(siteId?: string) {
   return siteId || process.env.DASHBOARD_SITE_ID || "tdiscount"
 }
 
-function getLookbackDays() {
-  const parsed = Number(process.env.DASHBOARD_LOOKBACK_DAYS || 7)
+function getLookbackDays(override?: number) {
+  const parsed = Number(override || process.env.DASHBOARD_LOOKBACK_DAYS || 7)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 7
 }
 
@@ -745,11 +745,11 @@ function sortedChannelRows(
     .sort((a, b) => (sortBy === "purchases" ? b.purchases - a.purchases || b.revenue - a.revenue : b.sessions - a.sessions))
 }
 
-export async function loadInsights(siteIdOverride?: string): Promise<BehaviorInsights> {
+export async function loadInsights(siteIdOverride?: string, options: { lookbackDays?: number } = {}): Promise<BehaviorInsights> {
   await ensureAutomationSettingsSchema()
 
   const siteId = getSiteId(siteIdOverride)
-  const days = getLookbackDays()
+  const days = getLookbackDays(options.lookbackDays)
   const salesDays = getSalesLookbackDays()
   const quotedSite = sqlString(siteId)
   const dateFilter = `metric_date >= today() - ${days}`
