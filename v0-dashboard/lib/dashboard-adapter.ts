@@ -162,11 +162,14 @@ function inferDataType(column: string): string {
 }
 
 export function buildDataQuality(data: BehaviorInsights): DataQualityMetrics {
-  const columns: ColumnCoverage[] = Object.entries(data.column_utilization.top_15_filled).map(([column, share]) => ({
-    column,
-    fillRate: Number((share * 100).toFixed(1)),
-    dataType: inferDataType(column),
-  }))
+  const eventFrequencyColumns = new Set(["add_to_cart", "checkout_start", "purchase_completed"])
+  const columns: ColumnCoverage[] = Object.entries(data.column_utilization.top_15_filled)
+    .filter(([column]) => !eventFrequencyColumns.has(column))
+    .map(([column, share]) => ({
+      column,
+      fillRate: Number((share * 100).toFixed(1)),
+      dataType: inferDataType(column),
+    }))
   const overallCoverage =
     columns.reduce((sum, column) => sum + column.fillRate, 0) / (columns.length || 1)
   return {

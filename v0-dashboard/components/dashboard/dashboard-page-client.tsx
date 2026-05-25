@@ -2823,15 +2823,16 @@ function CustomerSignalsCard({ insights }: { insights: BehaviorInsights }) {
 }
 
 function DataCoverageCard({ insights }: { insights: BehaviorInsights }) {
+  const { tr } = useI18n()
   const quality = buildDataQuality(insights)
   const rows = quality.columns.slice(0, 8)
   return (
-    <Surface title="Data Coverage" description="How complete the important tracker fields are.">
+    <Surface title={tr("Data Coverage")} description={tr("Completeness of required fields on received events. Behaviour frequencies are shown separately.")}>
       <div className="space-y-3">
         {rows.map((row) => (
           <div key={row.column} className="space-y-2">
             <div className="flex items-center justify-between text-xs">
-              <span className="font-medium text-slate-600">{cleanLabel(row.column)}</span>
+              <span className="font-medium text-slate-600">{tr(cleanLabel(row.column))}</span>
               <span className="font-semibold text-slate-950">{fmtPct(row.fillRate)}</span>
             </div>
             <div className="h-2 rounded-full bg-slate-100">
@@ -2842,6 +2843,70 @@ function DataCoverageCard({ insights }: { insights: BehaviorInsights }) {
             </div>
           </div>
         ))}
+      </div>
+    </Surface>
+  )
+}
+
+function EventCaptureHealthCard({ insights }: { insights: BehaviorInsights }) {
+  const { tr } = useI18n()
+  const eventRows = [
+    {
+      key: "add_to_cart",
+      label: "Add To Cart",
+      helper: "Cart action events",
+      tone: "blue",
+    },
+    {
+      key: "checkout_start",
+      label: "Checkout Started",
+      helper: "Checkout entry events",
+      tone: "indigo",
+    },
+    {
+      key: "purchase_completed",
+      label: "Purchase Completed",
+      helper: "Backend purchase and order events",
+      tone: "emerald",
+    },
+  ] as const
+  const values = insights.column_utilization.top_15_filled
+
+  const toneClasses = {
+    blue: "bg-blue-500",
+    indigo: "bg-indigo-500",
+    emerald: "bg-emerald-500",
+  }
+
+  return (
+    <Surface
+      title={tr("Event Capture Health")}
+      description={tr("How often key commerce actions appear in the event stream. This is behaviour frequency, not field completeness.")}
+    >
+      <div className="space-y-4">
+        {eventRows.map((row) => {
+          const rate = Number(((values[row.key] || 0) * 100).toFixed(1))
+          return (
+            <div key={row.key} className="space-y-2">
+              <div className="flex items-start justify-between gap-4 text-xs">
+                <div>
+                  <div className="font-medium text-slate-700">{tr(row.label)}</div>
+                  <div className="mt-0.5 text-slate-500">{tr(row.helper)}</div>
+                </div>
+                <span className="font-semibold tabular-nums text-slate-950">{fmtPct(rate)}</span>
+              </div>
+              <div className="h-2 rounded-full bg-slate-100">
+                <div
+                  className={cn("h-full rounded-full", toneClasses[row.tone])}
+                  style={{ width: `${Math.max(Math.min(rate, 100), rate ? 6 : 0)}%` }}
+                />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <div className="mt-4 rounded-md border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-900">
+        {tr("Low percentages can be normal on busy stores, but sudden drops should be checked in Live Events.")}
       </div>
     </Surface>
   )
@@ -3489,7 +3554,10 @@ function ActiveViewContent({
             <LiveEventStream insights={insights} />
             <EventMixCard insights={insights} />
           </section>
-          <DataCoverageCard insights={insights} />
+          <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+            <DataCoverageCard insights={insights} />
+            <EventCaptureHealthCard insights={insights} />
+          </section>
         </>
       )
     case "funnels":
