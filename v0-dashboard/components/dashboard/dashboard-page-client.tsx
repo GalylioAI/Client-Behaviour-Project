@@ -73,6 +73,7 @@ import {
 import type { BehaviorInsights } from "@/lib/insights"
 import { useI18n } from "@/lib/i18n"
 import type { TenantSiteAccess } from "@/lib/tenant-access"
+import type { ProductInsight } from "@/lib/dashboard-types"
 import { cn } from "@/lib/utils"
 
 const chartColors = ["#1769E8", "#14B8A6", "#6366F1", "#F59E0B", "#EF4444", "#64748B"]
@@ -95,6 +96,15 @@ type DashboardView =
   | "settings"
 
 type DashboardSite = Pick<TenantSiteAccess, "site_id" | "tenant_id" | "domain" | "platform" | "status">
+
+type LiveAiInsightBundle = {
+  alert: ProductInsight
+  recommendations: ProductInsight[]
+  mode: "mock" | "llm"
+  model: string
+  data_as_of: string
+  error?: string
+}
 
 const viewMeta: Record<DashboardView, { title: string; description: string }> = {
   overview: {
@@ -1553,17 +1563,34 @@ function TrafficCard({ insights }: { insights: BehaviorInsights }) {
   )
 }
 
-function AIAlertCard({ insights }: { insights: BehaviorInsights }) {
+function AIAlertCard({
+  insights,
+  aiInsights,
+  isAiInsightsLoading = false,
+}: {
+  insights: BehaviorInsights
+  aiInsights?: LiveAiInsightBundle | null
+  isAiInsightsLoading?: boolean
+}) {
   const { tr } = useI18n()
   const dropoff = insights.commercial_funnel.largest_dropoff
   const productNotes = buildProductInsights(insights)
-  const topNote = productNotes[0]
+  const topNote = aiInsights?.alert || productNotes[0]
+  const sourceLabel = isAiInsightsLoading ? tr("Generating") : aiInsights?.mode === "llm" ? tr("Live AI") : tr("Rules fallback")
   return (
     <Surface
       title={tr("AI Opportunity Alert")}
-      description={tr("Deterministic insight today, ready to become ML-backed later.")}
+      description={aiInsights?.mode === "llm" ? tr("Generated from the latest site snapshot using the configured AI provider.") : tr("Live AI uses the same Copilot provider. Rules stay as fallback if the provider is unavailable.")}
       className="border-red-100 bg-gradient-to-br from-white to-red-50/40"
-      action={<Badge className="border-red-100 bg-red-50 text-red-700 hover:bg-red-50" variant="outline">{tr("High impact")}</Badge>}
+      action={
+        <div className="flex flex-wrap gap-2">
+          <Badge className="border-red-100 bg-red-50 text-red-700 hover:bg-red-50" variant="outline">{tr("High impact")}</Badge>
+          <Badge className="border-blue-100 bg-blue-50 text-blue-700 hover:bg-blue-50" variant="outline">
+            {isAiInsightsLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+            {sourceLabel}
+          </Badge>
+        </div>
+      }
     >
       <div className="flex items-start gap-3">
         <div className="grid h-9 w-9 place-items-center rounded-md bg-red-50 text-red-600">
@@ -1576,8 +1603,8 @@ function AIAlertCard({ insights }: { insights: BehaviorInsights }) {
               `${tr("The biggest decline is from")} ${tr(cleanLabel(dropoff.from_stage))} ${tr("to")} ${tr(cleanLabel(dropoff.to_stage))}.`}
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Badge variant="outline" className="bg-white">{tr("Drop-off")} {dropoff.dropoff_pct_points.toFixed(2)} pts</Badge>
-            <Badge variant="outline" className="bg-white">{tr("Confidence: rules based")}</Badge>
+            {topNote?.metric ? <Badge variant="outline" className="bg-white">{topNote.metric.label}: {topNote.metric.value}</Badge> : <Badge variant="outline" className="bg-white">{tr("Drop-off")} {dropoff.dropoff_pct_points.toFixed(2)} pts</Badge>}
+            <Badge variant="outline" className="bg-white">{aiInsights?.mode === "llm" ? tr("Confidence: AI assisted") : tr("Confidence: rules based")}</Badge>
           </div>
         </div>
       </div>
@@ -2620,12 +2647,22 @@ function PipelineHealthCard({ insights }: { insights: BehaviorInsights }) {
   )
 }
 
-function RightPanel({ insights }: { insights: BehaviorInsights }) {
+function RightPanel({
+  insights,
+  aiInsights,
+  isAiInsightsLoading = false,
+}: {
+  insights: BehaviorInsights
+  aiInsights?: LiveAiInsightBundle | null
+  isAiInsightsLoading?: boolean
+}) {
   const site = insights.operations.site
   const keys = insights.operations.keys
   const latestRun = insights.operations.analysis_runs[0]
   const publicKeys = keys.filter((key) => key.key_type === "public_write")
   const secretKeys = keys.filter((key) => key.key_type === "server_secret")
+  const aiRecommendations = aiInsights?.recommendations?.length ? aiInsights.recommendations : buildProductInsights(insights).slice(0, 3)
+  const aiStatusLabel = isAiInsightsLoading ? "Generating" : aiInsights?.mode === "llm" ? "Live AI" : "Rules fallback"
   return (
     <aside className="hidden border-l border-slate-200 bg-slate-50/80 xl:block">
       <div className="sticky top-16 h-[calc(100vh-4rem)] overflow-y-auto p-4">
@@ -2697,19 +2734,34 @@ function RightPanel({ insights }: { insights: BehaviorInsights }) {
             </Button>
           </Surface>
 
-          <Surface title="AI Recommendations" className="shadow-none">
+          <Surface
+            title="AI Recommendations"
+            className="shadow-none"
+            action={<StatusDot status={aiInsights?.mode === "llm" ? "healthy" : isAiInsightsLoading ? "processing" : "neutral"} label={aiStatusLabel} />}
+          >
             <div className="space-y-3">
-              {buildProductInsights(insights).slice(0, 3).map((item) => (
+              {isAiInsightsLoading && !aiInsights ? (
+                <div className="rounded-md border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-900">
+                  <div className="mb-2 flex items-center gap-2 font-semibold">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Generating current suggestions...
+                  </div>
+                  The same AI provider used by Copilot is reading the latest site snapshot.
+                </div>
+              ) : null}
+              {aiRecommendations.map((item) => (
                 <div key={item.id} className="rounded-md border border-indigo-100 bg-indigo-50 p-3">
                   <div className="flex items-start gap-2">
                     <Sparkles className="mt-0.5 h-4 w-4 text-indigo-600" />
                     <div>
                       <div className="text-sm font-semibold text-indigo-950">{item.title}</div>
                       <div className="mt-1 line-clamp-3 text-xs leading-5 text-indigo-800">{item.description}</div>
+                      {item.metric ? <div className="mt-2 text-[11px] font-semibold text-indigo-700">{item.metric.label}: {item.metric.value}</div> : null}
                     </div>
                   </div>
                 </div>
               ))}
+              {aiInsights?.error ? <p className="text-xs leading-5 text-slate-500">AI provider fallback: {aiInsights.error}.</p> : null}
             </div>
           </Surface>
         </div>
@@ -3534,9 +3586,13 @@ function CopilotDock({ siteId }: { siteId: string }) {
 function ActiveViewContent({
   view,
   insights,
+  aiInsights,
+  isAiInsightsLoading = false,
 }: {
   view: DashboardView
   insights: BehaviorInsights
+  aiInsights?: LiveAiInsightBundle | null
+  isAiInsightsLoading?: boolean
 }) {
   const { tr } = useI18n()
 
@@ -3567,7 +3623,7 @@ function ActiveViewContent({
             <FunnelCard insights={insights} />
             <TrendsCard insights={insights} />
           </section>
-          <AIAlertCard insights={insights} />
+          <AIAlertCard insights={insights} aiInsights={aiInsights} isAiInsightsLoading={isAiInsightsLoading} />
         </>
       )
     case "audience":
@@ -3696,6 +3752,8 @@ export function DashboardPageClient({
   const [refreshMessage, setRefreshMessage] = useState("")
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isPageHeaderOpen, setIsPageHeaderOpen] = useState(true)
+  const [aiInsights, setAiInsights] = useState<LiveAiInsightBundle | null>(null)
+  const [isAiInsightsLoading, setIsAiInsightsLoading] = useState(false)
   const activeView = normalizeView(initialView)
   const viewKey = viewTranslationKeys[activeView]
   const meta = {
@@ -3716,6 +3774,7 @@ export function DashboardPageClient({
       ? [currentSite]
       : []
   const selectedSidebarSite = sidebarSites.find((item) => item.site_id === (selectedSiteId || currentSite.site_id)) || currentSite
+  const activeSiteId = site.site_id || selectedSiteId || selectedSidebarSite.site_id || "tdiscount"
   const latestEvent = insights.operations.recent_events[0]?.received_at || insights.dataset.date_range_utc.max
 
   const overviewTrend = insights.daily_trends.map((row) => ({
@@ -3745,6 +3804,38 @@ export function DashboardPageClient({
   useEffect(() => {
     window.localStorage.setItem(PAGE_HEADER_STORAGE_KEY, String(isPageHeaderOpen))
   }, [isPageHeaderOpen])
+
+  useEffect(() => {
+    if (!activeSiteId) return
+
+    const controller = new AbortController()
+    setIsAiInsightsLoading(true)
+
+    fetch("/api/copilot/insights", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ site_id: activeSiteId }),
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const result = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          throw new Error(result.error || "AI insights could not be generated.")
+        }
+        setAiInsights(result as LiveAiInsightBundle)
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return
+        setAiInsights(null)
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsAiInsightsLoading(false)
+        }
+      })
+
+    return () => controller.abort()
+  }, [activeSiteId, latestEvent])
 
   const handleRefresh = async () => {
     const siteId = site.site_id || selectedSiteId
@@ -3923,13 +4014,13 @@ export function DashboardPageClient({
               </div>
             </section>
 
-            <ActiveViewContent view={activeView} insights={insights} />
+            <ActiveViewContent view={activeView} insights={insights} aiInsights={aiInsights} isAiInsightsLoading={isAiInsightsLoading} />
           </div>
         </main>
 
-        <RightPanel insights={insights} />
+        <RightPanel insights={insights} aiInsights={aiInsights} isAiInsightsLoading={isAiInsightsLoading} />
       </div>
-      <CopilotDock siteId={site.site_id || selectedSiteId || selectedSidebarSite.site_id || "tdiscount"} />
+      <CopilotDock siteId={activeSiteId} />
     </div>
   )
 }

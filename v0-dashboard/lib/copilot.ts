@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises"
 import path from "node:path"
 
 import { runCopilotTools, type CopilotToolResult } from "@/lib/copilot-tools"
+import type { ProductInsight } from "@/lib/dashboard-types"
 import type { BehaviorInsights } from "@/lib/insights"
 
 export type CopilotRole = "user" | "assistant"
@@ -25,6 +26,16 @@ export interface CopilotResponse {
   suggested_actions: CopilotAction[]
   sources: string[]
   tools_used: string[]
+}
+
+export interface CopilotDashboardInsights {
+  alert: ProductInsight
+  recommendations: ProductInsight[]
+  mode: "mock" | "llm"
+  model: string
+  data_as_of: string
+  sources: string[]
+  error?: string
 }
 
 type SiteSnapshot = ReturnType<typeof buildSiteSnapshot>
@@ -391,6 +402,252 @@ function mockAnswer(question: string, snapshot: SiteSnapshot, toolResults: Copil
 
   lines.push(`Data as of ${snapshot.data_as_of}.`)
   return lines.join("\n\n")
+}
+
+function fallbackDashboardInsights(snapshot: SiteSnapshot): Pick<CopilotDashboardInsights, "alert" | "recommendations"> {
+  const overview = snapshot.business_overview
+  const products = snapshot.products
+  const topProduct = products[0]
+  const topChannel = snapshot.acquisition.channels[0]
+  const topIntent = snapshot.purchase_intent.top_opportunities?.[0]
+  const conversionGap = Math.max(overview.cart_sessions - overview.purchase_sessions, 0)
+
+  const alert: ProductInsight = {
+    id: "fallback-funnel",
+    type: conversionGap > 0 ? "warning" : "info",
+    title: conversionGap > 0 ? "Cart activity is not fully converting" : "Keep watching conversion quality",
+    description: conversionGap > 0
+      ? `${conversionGap} cart sessions did not become purchase sessions in the current window. Review the funnel and recovery drafts before increasing outreach.`
+      : "The current snapshot has limited cart leakage. Keep monitoring products, traffic sources, and checkout status changes.",
+    metric: {
+      label: "Cart gap",
+      value: `${conversionGap} sessions`,
+    },
+  }
+
+  const recommendations: ProductInsight[] = [
+    topProduct
+      ? {
+          id: "fallback-product",
+          type: "opportunity",
+          title: "Prioritize the strongest product signal",
+          description: `${topProduct.product_name || topProduct.product_id} has ${topProduct.views} views and ${topProduct.add_to_cart_events} add-to-cart actions. Use it in product follow-up and merchandising tests.`,
+          metric: { label: "Engagement", value: `${topProduct.engagement_events} events` },
+        }
+      : null,
+    topChannel
+      ? {
+          id: "fallback-channel",
+          type: "info",
+          title: "Protect the strongest acquisition channel",
+          description: `${topChannel.channel} currently brings ${topChannel.sessions} sessions and ${topChannel.purchases} purchases. Compare it against buyer campaigns before changing spend.`,
+          metric: { label: "Revenue", value: `${topChannel.revenue} TND` },
+        }
+      : null,
+    topIntent
+      ? {
+          id: "fallback-intent",
+          type: "warning",
+          title: "Review high-intent visitors",
+          description: `${snapshot.purchase_intent.open_intent_sessions || 0} open intent sessions are available. Start with the highest scored sessions and check whether outreach drafts are prepared.`,
+          metric: { label: "Top score", value: `${topIntent.score}` },
+        }
+      : {
+          id: "fallback-actions",
+          type: "info",
+          title: "Use Smart Actions as the operating queue",
+          description: `The recommendation engine has ${snapshot.recommendations.total_candidates} candidates and ${snapshot.recommendations.prepared_emails} prepared drafts for this site.`,
+          metric: { label: "Drafts", value: `${snapshot.recommendations.prepared_emails}` },
+        },
+  ].filter(Boolean) as ProductInsight[]
+
+  return { alert, recommendations: recommendations.slice(0, 3) }
+}
+
+function parseJsonObject(text: string) {
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?/i, "")
+    .replace(/```$/i, "")
+    .trim()
+  const start = cleaned.indexOf("{")
+  const end = cleaned.lastIndexOf("}")
+  if (start < 0 || end < start) {
+    throw new Error("AI response did not contain a JSON object.")
+  }
+  return JSON.parse(cleaned.slice(start, end + 1)) as unknown
+}
+
+function safeInsightType(value: unknown): ProductInsight["type"] {
+  return value === "opportunity" || value === "warning" || value === "success" || value === "info" ? value : "info"
+}
+
+function cleanShortText(value: unknown, fallback: string, maxLength: number) {
+  const text = String(value || "").replace(/\s+/g, " ").trim()
+  return (text || fallback).slice(0, maxLength)
+}
+
+function sanitizeInsight(value: unknown, fallback: ProductInsight, id: string): ProductInsight {
+  if (!value || typeof value !== "object") {
+    return { ...fallback, id }
+  }
+  const raw = value as Record<string, unknown>
+  const metric = raw.metric && typeof raw.metric === "object" ? raw.metric as Record<string, unknown> : null
+
+  return {
+    id,
+    type: safeInsightType(raw.type),
+    title: cleanShortText(raw.title, fallback.title, 90),
+    description: cleanShortText(raw.description, fallback.description, 260),
+    metric: metric
+      ? {
+          label: cleanShortText(metric.label, fallback.metric?.label || "Signal", 40),
+          value: cleanShortText(metric.value, fallback.metric?.value || "", 40),
+        }
+      : fallback.metric,
+  }
+}
+
+async function callOpenAICompatibleDashboardInsights({
+  knowledge,
+  snapshot,
+}: {
+  knowledge: string
+  snapshot: SiteSnapshot
+}) {
+  const apiKey = process.env.COPILOT_API_KEY
+  const model = process.env.COPILOT_MODEL
+  const baseUrl = (process.env.COPILOT_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "")
+
+  if (!apiKey || !model) {
+    return null
+  }
+
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        {
+          role: "system",
+          content: [
+            "You generate live dashboard suggestion cards for BehaviourAI.",
+            "Use only the provided site snapshot and platform knowledge.",
+            "Return only valid JSON. No markdown, no commentary.",
+            "Do not invent metrics, revenue, customer names, model status, or products.",
+            "Do not translate product names or campaign/referrer names.",
+            "Keep each title under 90 characters and each description under 260 characters.",
+            "Make the suggestions practical for a store owner.",
+            "",
+            "JSON schema:",
+            JSON.stringify({
+              alert: {
+                type: "warning|opportunity|info|success",
+                title: "main urgent insight",
+                description: "why it matters and what to check next",
+                metric: { label: "short metric label", value: "short metric value" },
+              },
+              recommendations: [
+                {
+                  type: "warning|opportunity|info|success",
+                  title: "suggestion title",
+                  description: "business recommendation",
+                  metric: { label: "short metric label", value: "short metric value" },
+                },
+              ],
+            }),
+          ].join("\n"),
+        },
+        {
+          role: "user",
+          content: [
+            "PLATFORM KNOWLEDGE:",
+            knowledge,
+            "",
+            "SITE SNAPSHOT:",
+            JSON.stringify(snapshot, null, 2),
+            "",
+            "Generate one alert and exactly three recommendation cards.",
+          ].join("\n"),
+        },
+      ],
+      temperature: 0.25,
+      max_tokens: 900,
+    }),
+    signal: AbortSignal.timeout(30000),
+  })
+
+  if (!response.ok) {
+    const detail = await response.text()
+    throw new Error(`Copilot provider failed: ${response.status} ${detail}`)
+  }
+
+  const payload = await response.json()
+  return String(payload.choices?.[0]?.message?.content || "").trim()
+}
+
+export async function generateDashboardAiInsights({
+  insights,
+}: {
+  insights: BehaviorInsights
+}): Promise<CopilotDashboardInsights> {
+  const snapshot = buildSiteSnapshot(insights)
+  const knowledge = await loadCopilotKnowledge()
+  const fallback = fallbackDashboardInsights(snapshot)
+  const provider = process.env.COPILOT_PROVIDER || "mock"
+
+  if (provider === "openai-compatible") {
+    try {
+      const generated = await callOpenAICompatibleDashboardInsights({
+        knowledge: knowledge.text,
+        snapshot,
+      })
+      if (generated) {
+        const parsed = parseJsonObject(generated) as Record<string, unknown>
+        const rawRecommendations = Array.isArray(parsed.recommendations) ? parsed.recommendations : []
+        const recommendations = rawRecommendations
+          .slice(0, 3)
+          .map((item, index) => sanitizeInsight(item, fallback.recommendations[index] || fallback.alert, `ai-rec-${index}`))
+
+        while (recommendations.length < 3 && fallback.recommendations[recommendations.length]) {
+          recommendations.push({
+            ...fallback.recommendations[recommendations.length],
+            id: `fallback-rec-${recommendations.length}`,
+          })
+        }
+
+        return {
+          alert: sanitizeInsight(parsed.alert, fallback.alert, "ai-alert"),
+          recommendations,
+          mode: "llm",
+          model: process.env.COPILOT_MODEL || "configured-model",
+          data_as_of: snapshot.data_as_of,
+          sources: knowledge.sources,
+        }
+      }
+    } catch (error) {
+      return {
+        ...fallback,
+        mode: "mock",
+        model: "rules-mock/provider-fallback",
+        data_as_of: snapshot.data_as_of,
+        sources: knowledge.sources,
+        error: friendlyProviderError(error),
+      }
+    }
+  }
+
+  return {
+    ...fallback,
+    mode: "mock",
+    model: "rules-mock",
+    data_as_of: snapshot.data_as_of,
+    sources: knowledge.sources,
+  }
 }
 
 function friendlyProviderError(error: unknown) {
