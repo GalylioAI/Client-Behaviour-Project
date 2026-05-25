@@ -824,7 +824,7 @@ function Sidebar({
   }
 
   return (
-    <aside className="hidden h-screen min-w-0 overflow-hidden border-r border-slate-200 bg-white transition-all duration-300 ease-out lg:sticky lg:top-0 lg:flex lg:flex-col">
+    <aside className="hidden h-screen min-w-0 overflow-hidden border-r border-slate-200 bg-white transition-all duration-300 ease-out lg:sticky lg:top-0 lg:row-span-2 lg:flex lg:flex-col">
       <div className={cn("flex h-16 items-center border-b border-slate-100 transition-all duration-300", isCollapsed ? "justify-center px-2" : "gap-3 px-5")}>
         <div className="grid h-8 w-8 place-items-center rounded-md bg-blue-600 text-white shadow-sm">
           <Activity className="h-4 w-4" />
@@ -2664,8 +2664,7 @@ function RightPanel({
   const aiRecommendations = aiInsights?.recommendations?.length ? aiInsights.recommendations : buildProductInsights(insights).slice(0, 3)
   const aiStatusLabel = isAiInsightsLoading ? "Generating" : aiInsights?.mode === "llm" ? "Live AI" : "Rules fallback"
   return (
-    <aside className="hidden border-l border-slate-200 bg-slate-50/80 xl:block">
-      <div className="sticky top-0 z-20 h-16 border-b border-slate-200 bg-white/90 backdrop-blur" />
+    <aside className="hidden border-l border-slate-200 bg-slate-50/80 xl:col-start-3 xl:row-start-2 xl:block">
       <div className="sticky top-16 h-[calc(100vh-4rem)] overflow-y-auto p-4">
         <div className="space-y-4">
           <Surface title="Tenant / Site Status" className="shadow-none">
@@ -3874,7 +3873,7 @@ export function DashboardPageClient({
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <div
         className={cn(
-          "grid min-h-screen transition-[grid-template-columns] duration-300 ease-out",
+          "grid min-h-screen transition-[grid-template-columns] duration-300 ease-out lg:grid-rows-[4rem_1fr]",
           isSidebarOpen
             ? "lg:grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)_360px]"
             : "lg:grid-cols-[72px_minmax(0,1fr)] xl:grid-cols-[72px_minmax(0,1fr)_360px]"
@@ -3888,7 +3887,7 @@ export function DashboardPageClient({
           onToggleSidebar={() => setIsSidebarOpen((value) => !value)}
         />
 
-        <main className="min-w-0">
+        <div className="min-w-0 lg:col-start-2 lg:row-start-1 xl:col-end-4">
           <Topbar
             siteLabel={site.domain || site.site_id || "tdiscount"}
             siteId={site.site_id || "tdiscount"}
@@ -3896,7 +3895,9 @@ export function DashboardPageClient({
             isSidebarOpen={isSidebarOpen}
             onToggleSidebar={() => setIsSidebarOpen((value) => !value)}
           />
+        </div>
 
+        <main className="min-w-0 lg:col-start-2 lg:row-start-2">
           <div className="mx-auto max-w-[1440px] space-y-5 px-4 py-5 md:px-6">
             <section
               role="button"
