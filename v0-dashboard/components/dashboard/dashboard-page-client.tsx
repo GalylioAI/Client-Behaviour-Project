@@ -2665,6 +2665,7 @@ function RightPanel({
   const aiStatusLabel = isAiInsightsLoading ? "Generating" : aiInsights?.mode === "llm" ? "Live AI" : "Rules fallback"
   return (
     <aside className="hidden border-l border-slate-200 bg-slate-50/80 xl:block">
+      <div className="sticky top-0 z-20 h-16 border-b border-slate-200 bg-white/90 backdrop-blur" />
       <div className="sticky top-16 h-[calc(100vh-4rem)] overflow-y-auto p-4">
         <div className="space-y-4">
           <Surface title="Tenant / Site Status" className="shadow-none">
