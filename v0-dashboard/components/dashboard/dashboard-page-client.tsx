@@ -1019,6 +1019,7 @@ function Topbar({
 }) {
   const { t } = useI18n()
   const router = useRouter()
+  const searchRef = useRef<HTMLFormElement | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [isDateMenuOpen, setIsDateMenuOpen] = useState(false)
@@ -1032,6 +1033,19 @@ function Topbar({
   const hasWarning = notifications.some((notification) => notification.tone === "warning")
   const accountLabel = userEmail ? userEmail.split("@")[0] : t("common.admin")
 
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (searchRef.current && !searchRef.current.contains(target)) {
+        setIsSearchOpen(false)
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown)
+    return () => document.removeEventListener("mousedown", handlePointerDown)
+  }, [])
+
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" })
     window.location.href = "/login"
@@ -1039,6 +1053,7 @@ function Topbar({
 
   function navigate(href: string) {
     setIsSearchOpen(false)
+    setSearchQuery("")
     setIsDateMenuOpen(false)
     setIsNotificationMenuOpen(false)
     setIsAccountMenuOpen(false)
@@ -1047,6 +1062,10 @@ function Topbar({
 
   function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!searchQuery.trim()) {
+      setIsSearchOpen(true)
+      return
+    }
     const first = searchActions[0]
     if (first) navigate(first.href)
   }
@@ -1076,6 +1095,7 @@ function Topbar({
       </div>
 
       <form
+        ref={searchRef}
         onSubmit={handleSearchSubmit}
         className="relative hidden min-w-[280px] max-w-[420px] flex-1 lg:block"
       >
@@ -1094,7 +1114,22 @@ function Topbar({
             className="min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-500"
             placeholder={t("common.searchPlaceholder")}
           />
-          <kbd className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] font-medium text-slate-400">Enter</kbd>
+          {searchQuery ? (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery("")
+                setIsSearchOpen(false)
+              }}
+              className="grid h-5 w-5 place-items-center rounded text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              aria-label="Clear search"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+          <kbd className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] font-medium text-slate-400">
+            {searchQuery ? "Enter" : "Type"}
+          </kbd>
         </div>
         {isSearchOpen ? (
           <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl shadow-slate-200/70">
