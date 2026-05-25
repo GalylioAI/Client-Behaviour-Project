@@ -53,6 +53,8 @@ services:
       KAFKA_BROKERS: "192.168.1.105:9092,192.168.1.106:9092,192.168.1.109:9092"
       KAFKA_TOPIC: "ecommerce.events"
       DEAD_LETTER_TOPIC: "ecommerce.dead-letter"
+      KAFKA_PRODUCER_START_TIMEOUT_SECONDS: "10"
+      KAFKA_SEND_TIMEOUT_SECONDS: "8"
       CORS_ALLOW_ORIGINS: "https://tdiscount.tn,https://www.tdiscount.tn"
       CLICKHOUSE_HTTP_URL: "http://admin:changeme@192.168.1.106:8123/?database=tracer"
       SITE_REGISTRY_ENABLED: "true"

@@ -7,6 +7,7 @@ import {
   ArrowRight,
   BarChart3,
   CheckCircle2,
+  Chrome,
   KeyRound,
   Loader2,
   LockKeyhole,
@@ -18,12 +19,14 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { LanguageSwitcher } from "@/components/language-switcher"
+import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 const previewEvents = [
-  { label: "Product viewed", meta: "tdiscount.tn/product/air-fryer", tone: "bg-blue-500" },
+  { label: "Product viewed", meta: "website.com/product/example", tone: "bg-blue-500" },
   { label: "Cart intent detected", meta: "2 items · 148.00 TND", tone: "bg-teal-500" },
-  { label: "Key accepted", meta: "pk_live_e80cfcfa", tone: "bg-emerald-500" },
+  { label: "Key accepted", meta: "pk_live_example", tone: "bg-emerald-500" },
 ]
 
 const funnel = [
@@ -65,10 +68,17 @@ function PreviewMetric({
   )
 }
 
-export function LoginPage({ nextPath = "/app" }: { nextPath?: string }) {
+export function LoginPage({ nextPath = "/app", oauthError = "" }: { nextPath?: string; oauthError?: string }) {
+  const { t } = useI18n()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [error, setError] = useState("")
+  const [error, setError] = useState(
+    oauthError
+      ? oauthError === "google_not_configured"
+        ? "Google login is not configured yet. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET."
+        : decodeURIComponent(oauthError)
+      : ""
+  )
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -100,34 +110,50 @@ export function LoginPage({ nextPath = "/app" }: { nextPath?: string }) {
       <main className="grid min-h-screen lg:grid-cols-[minmax(0,0.86fr)_minmax(520px,1.14fr)]">
         <section className="flex min-h-screen flex-col px-5 py-5 sm:px-8 lg:px-12">
           <header className="flex items-center justify-between gap-4">
-            <Link href="/login" className="flex items-center gap-3">
+            <Link href="/" className="flex items-center gap-3">
               <LogoMark className="h-9 w-9" />
               <div>
                 <div className="text-sm font-semibold text-slate-950">BehaviourAI</div>
-                <div className="text-xs text-slate-500">Tenant workspace</div>
+                <div className="text-xs text-slate-500">{t("common.tenantWorkspace")}</div>
               </div>
             </Link>
-            <Button asChild variant="outline" className="border-slate-200 bg-white text-slate-700">
-              <Link href="/start">
-                Sign Up
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
+            <div className="flex items-center gap-2">
+              <LanguageSwitcher compact />
+              <Button asChild variant="outline" className="border-slate-200 bg-white text-slate-700">
+                <Link href="/start">
+                  {t("common.signup")}
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
           </header>
 
           <div className="flex flex-1 items-center justify-center py-10">
             <div className="w-full max-w-[420px]">
               <div className="mb-8">
                 <LogoMark />
-                <h1 className="mt-6 text-3xl font-semibold tracking-tight text-slate-950">Welcome Back</h1>
+                <h1 className="mt-6 text-3xl font-semibold tracking-tight text-slate-950">{t("auth.welcomeBack")}</h1>
                 <p className="mt-2 text-sm leading-6 text-slate-500">
-                  Log in to your behaviour intelligence workspace.
+                  {t("auth.loginSubtitle")}
                 </p>
               </div>
 
               <form className="space-y-5" onSubmit={submit}>
+                <Button asChild type="button" variant="outline" className="h-11 w-full border-slate-200 bg-white text-slate-800 hover:bg-slate-50">
+                  <Link href={`/api/auth/google?next=${encodeURIComponent(nextPath || "/app")}`}>
+                    <Chrome className="h-4 w-4 text-blue-600" />
+                    {t("auth.continueGoogle")}
+                  </Link>
+                </Button>
+
+                <div className="flex items-center gap-3">
+                  <div className="h-px flex-1 bg-slate-200" />
+                  <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">{t("auth.orEmail")}</span>
+                  <div className="h-px flex-1 bg-slate-200" />
+                </div>
+
                 <div className="space-y-2">
-                  <Label className="text-xs font-semibold text-slate-700">Email Address</Label>
+                  <Label className="text-xs font-semibold text-slate-700">{t("auth.email")}</Label>
                   <Input
                     type="email"
                     value={email}
@@ -139,12 +165,12 @@ export function LoginPage({ nextPath = "/app" }: { nextPath?: string }) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-xs font-semibold text-slate-700">Password</Label>
+                  <Label className="text-xs font-semibold text-slate-700">{t("auth.password")}</Label>
                   <Input
                     type="password"
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
-                    placeholder="Enter your password"
+                    placeholder={t("auth.passwordPlaceholder")}
                     disabled={isSubmitting}
                     className="h-11 border-slate-200 bg-white"
                   />
@@ -156,10 +182,10 @@ export function LoginPage({ nextPath = "/app" }: { nextPath?: string }) {
                       type="checkbox"
                       className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                     />
-                    Remember me
+                    {t("auth.remember")}
                   </label>
-                  <Link href="/start" className="font-medium text-blue-700 hover:text-blue-800">
-                    Forgot password?
+                  <Link href="/forgot-password" className="font-medium text-blue-700 hover:text-blue-800">
+                    {t("auth.forgot")}
                   </Link>
                 </div>
 
@@ -167,19 +193,19 @@ export function LoginPage({ nextPath = "/app" }: { nextPath?: string }) {
 
                 <Button type="submit" disabled={isSubmitting} className="h-11 w-full bg-blue-600 hover:bg-blue-700">
                   {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <LockKeyhole className="h-4 w-4" />}
-                  Login
+                  {t("auth.loginAction")}
                   {!isSubmitting ? <ArrowRight className="h-4 w-4" /> : null}
                 </Button>
               </form>
 
               <p className="mt-6 text-xs leading-5 text-slate-500">
-                By continuing, you agree to secure tenant access for your connected stores and analytics data.
+                {t("auth.terms")}
               </p>
 
               <div className="mt-8 text-center text-sm text-slate-500">
-                Don&apos;t have an account?{" "}
+                {t("auth.noAccount")}{" "}
                 <Link href="/start" className="font-semibold text-blue-700 hover:text-blue-800">
-                  Sign Up
+                  {t("common.signup")}
                 </Link>
               </div>
             </div>
@@ -211,10 +237,10 @@ export function LoginPage({ nextPath = "/app" }: { nextPath?: string }) {
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <div className="text-xs font-medium text-slate-500">Current store</div>
-                        <div className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">tdiscount.tn</div>
+                        <div className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">website.com</div>
                       </div>
                       <div className="rounded-md border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
-                        site_id: tdiscount
+                        site_id: website_demo
                       </div>
                     </div>
 

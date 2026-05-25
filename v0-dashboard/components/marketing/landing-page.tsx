@@ -1,3 +1,5 @@
+"use client"
+
 import Link from "next/link"
 import {
   Activity,
@@ -20,6 +22,8 @@ import {
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { LanguageSwitcher } from "@/components/language-switcher"
+import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 const features = [
@@ -35,7 +39,7 @@ const features = [
   },
   {
     icon: BarChart3,
-    title: "Layer 2 analytics",
+    title: "Business-ready analytics",
     body: "Raw events become funnels, product engagement, referral insights, data quality checks, and business metrics.",
   },
   {
@@ -54,7 +58,7 @@ const workflow = [
 ]
 
 const sceneEvents: Array<{ title: string; detail: string; icon: LucideIcon }> = [
-  { title: "Key accepted", detail: "pk_live_e80cfcfa", icon: KeyRound },
+  { title: "Key accepted", detail: "pk_live_example", icon: KeyRound },
   { title: "Product viewed", detail: "Air fryer", icon: Activity },
   { title: "AI opportunity", detail: "High intent", icon: Sparkles },
 ]
@@ -99,21 +103,36 @@ function BrandMark({ className }: { className?: string }) {
 }
 
 function FeatureCard({ icon: Icon, title, body }: { icon: LucideIcon; title: string; body: string }) {
+  const { tr } = useI18n()
+
   return (
     <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
       <div className="grid h-9 w-9 place-items-center rounded-md bg-blue-50 text-blue-700">
         <Icon className="h-4 w-4" />
       </div>
-      <h3 className="mt-4 text-sm font-semibold text-slate-950">{title}</h3>
-      <p className="mt-2 text-sm leading-6 text-slate-600">{body}</p>
+      <h3 className="mt-4 text-sm font-semibold text-slate-950">{tr(title)}</h3>
+      <p className="mt-2 text-sm leading-6 text-slate-600">{tr(body)}</p>
     </article>
   )
 }
 
 function HeroScene() {
+  const { dir, tr } = useI18n()
+  const isRtl = dir === "rtl"
+
   return (
-    <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-[62%] overflow-hidden lg:block">
-      <div className="absolute right-[-80px] top-20 h-[640px] w-[760px] rounded-lg border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.16)]">
+    <div
+      className={cn(
+        "pointer-events-none absolute inset-y-0 z-0 hidden w-[56%] overflow-hidden lg:block",
+        isRtl ? "left-0" : "right-0"
+      )}
+    >
+      <div
+        className={cn(
+          "absolute top-20 h-[640px] w-[760px] rounded-lg border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.16)]",
+          isRtl ? "left-[-90px]" : "right-[-90px]"
+        )}
+      >
         <div className="flex h-14 items-center justify-between border-b border-slate-100 px-5">
           <div className="flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
@@ -121,7 +140,7 @@ function HeroScene() {
             <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
           </div>
           <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
-            Live dashboard
+            {tr("Live dashboard")}
           </div>
         </div>
 
@@ -139,7 +158,7 @@ function HeroScene() {
                   index === 0 ? "bg-blue-50 text-blue-700" : "text-slate-500"
                 )}
               >
-                {item}
+                {tr(item)}
               </div>
             ))}
           </div>
@@ -147,12 +166,12 @@ function HeroScene() {
           <div className="bg-[#f8fafc] p-5">
             <div className="flex items-start justify-between">
               <div>
-                <div className="text-xs font-medium text-slate-500">Store overview</div>
-                <div className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">tdiscount.tn</div>
+                <div className="text-xs font-medium text-slate-500">{tr("Store overview")}</div>
+                <div className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">website.com</div>
               </div>
               <Badge variant="outline" className="border-emerald-100 bg-emerald-50 text-emerald-700">
                 <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                Receiving
+                {tr("Receiving")}
               </Badge>
             </div>
 
@@ -163,7 +182,7 @@ function HeroScene() {
                 ["Cart intent", "926", "text-amber-700"],
               ].map(([label, value, tone]) => (
                 <div key={label} className="rounded-lg border border-slate-200 bg-white p-4">
-                  <div className="text-xs font-medium text-slate-500">{label}</div>
+                  <div className="text-xs font-medium text-slate-500">{tr(label)}</div>
                   <div className={cn("mt-2 text-xl font-semibold", tone)}>{value}</div>
                 </div>
               ))}
@@ -172,7 +191,7 @@ function HeroScene() {
             <div className="mt-5 grid grid-cols-[minmax(0,1fr)_220px] gap-4">
               <div className="rounded-lg border border-slate-200 bg-white p-4">
                 <div className="flex items-center justify-between">
-                  <div className="text-sm font-semibold text-slate-950">Conversion funnel</div>
+                  <div className="text-sm font-semibold text-slate-950">{tr("Conversion funnel")}</div>
                   <BarChart3 className="h-4 w-4 text-blue-600" />
                 </div>
                 <div className="mt-5 space-y-4">
@@ -184,7 +203,7 @@ function HeroScene() {
                   ].map(([label, width, color]) => (
                     <div key={label} className="space-y-2">
                       <div className="flex justify-between text-xs">
-                        <span className="font-medium text-slate-600">{label}</span>
+                        <span className="font-medium text-slate-600">{tr(label)}</span>
                         <span className="font-semibold text-slate-950">{width}</span>
                       </div>
                       <div className="h-2 rounded-full bg-slate-100">
@@ -199,8 +218,8 @@ function HeroScene() {
                 {sceneEvents.map(({ title, detail, icon: Icon }) => (
                   <div key={title} className="rounded-lg border border-slate-200 bg-white p-3">
                     <Icon className="h-4 w-4 text-blue-600" />
-                    <div className="mt-2 text-xs font-semibold text-slate-950">{title}</div>
-                    <div className="mt-1 truncate text-xs text-slate-500">{detail}</div>
+                    <div className="mt-2 text-xs font-semibold text-slate-950">{tr(title)}</div>
+                    <div className="mt-1 truncate text-xs text-slate-500">{tr(detail)}</div>
                   </div>
                 ))}
               </div>
@@ -210,9 +229,9 @@ function HeroScene() {
               <div className="flex items-start gap-3">
                 <Sparkles className="mt-0.5 h-4 w-4 text-blue-700" />
                 <div>
-                  <div className="text-sm font-semibold text-blue-950">Recommended action</div>
+                  <div className="text-sm font-semibold text-blue-950">{tr("Recommended action")}</div>
                   <p className="mt-1 text-xs leading-5 text-blue-900">
-                    Create a cart recovery segment for visitors with repeated product intent.
+                    {tr("Create a cart recovery segment for visitors with repeated product intent.")}
                   </p>
                 </div>
               </div>
@@ -225,6 +244,9 @@ function HeroScene() {
 }
 
 export function LandingPage() {
+  const { t, tr, dir } = useI18n()
+  const isRtl = dir === "rtl"
+
   return (
     <div className="min-h-screen bg-white text-slate-900">
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
@@ -233,24 +255,25 @@ export function LandingPage() {
             <BrandMark />
             <div>
               <div className="text-sm font-semibold text-slate-950">BehaviourAI</div>
-              <div className="hidden text-xs text-slate-500 sm:block">Real-time commerce intelligence</div>
+              <div className="hidden text-xs text-slate-500 sm:block">{t("marketing.subtitle")}</div>
             </div>
           </Link>
 
           <nav className="hidden items-center gap-6 text-sm font-medium text-slate-600 md:flex">
-            <a href="#features" className="hover:text-slate-950">Features</a>
-            <a href="#workflow" className="hover:text-slate-950">How it works</a>
-            <a href="#pricing" className="hover:text-slate-950">Pricing</a>
-            <a href="#trust" className="hover:text-slate-950">Trust</a>
+            <a href="#features" className="hover:text-slate-950">{t("marketing.features")}</a>
+            <a href="#workflow" className="hover:text-slate-950">{t("marketing.workflow")}</a>
+            <a href="#pricing" className="hover:text-slate-950">{t("marketing.pricing")}</a>
+            <a href="#trust" className="hover:text-slate-950">{t("marketing.trust")}</a>
           </nav>
 
           <div className="flex items-center gap-2">
+            <LanguageSwitcher compact />
             <Button asChild variant="outline" className="hidden border-slate-200 bg-white text-slate-700 sm:inline-flex">
-              <Link href="/login">Login</Link>
+              <Link href="/login">{t("common.login")}</Link>
             </Button>
             <Button asChild className="bg-blue-600 hover:bg-blue-700">
               <Link href="/start">
-                Start
+                {t("common.start")}
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
@@ -261,33 +284,33 @@ export function LandingPage() {
       <main>
         <section className="relative overflow-hidden bg-[#f6f9fc]">
           <HeroScene />
-          <div className="mx-auto min-h-[88vh] max-w-[1180px] px-4 py-16 md:px-6 lg:py-24">
-            <div className="max-w-[620px]">
+          <div className="relative z-10 mx-auto min-h-[88vh] max-w-[1180px] px-4 py-16 md:px-6 lg:py-24">
+            <div className={cn("max-w-[560px]", isRtl && "ml-auto text-right")}>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline" className="border-blue-100 bg-blue-50 text-blue-700">
                   <Radio className="h-3 w-3" />
-                  Live event intelligence
+                  {t("marketing.heroBadge1")}
                 </Badge>
                 <Badge variant="outline" className="border-emerald-100 bg-emerald-50 text-emerald-700">
-                  Multi-tenant ready
+                  {t("marketing.heroBadge2")}
                 </Badge>
               </div>
               <h1 className="mt-6 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl lg:text-[64px] lg:leading-[1.02]">
                 BehaviourAI
               </h1>
               <p className="mt-5 max-w-xl text-base leading-7 text-slate-600 sm:text-lg">
-                A real-time behaviour analysis platform for ecommerce teams that want to understand intent, fix funnel leaks, and trigger smarter actions from WordPress or PrestaShop stores.
+                {t("marketing.heroBody")}
               </p>
 
               <div className="mt-8 flex flex-wrap gap-3">
                 <Button asChild size="lg" className="bg-blue-600 hover:bg-blue-700">
                   <Link href="/start">
-                    Create workspace
+                    {t("marketing.createWorkspace")}
                     <ArrowRight className="h-4 w-4" />
                   </Link>
                 </Button>
                 <Button asChild size="lg" variant="outline" className="border-slate-200 bg-white text-slate-700">
-                  <Link href="/login">Login</Link>
+                  <Link href="/login">{t("common.login")}</Link>
                 </Button>
               </div>
 
@@ -299,7 +322,7 @@ export function LandingPage() {
                 ].map(([label, value]) => (
                   <div key={label} className="rounded-lg border border-slate-200 bg-white/90 p-3">
                     <div className="text-xs font-medium text-slate-500">{label}</div>
-                    <div className="mt-1 text-sm font-semibold text-slate-950">{value}</div>
+                    <div className="mt-1 text-sm font-semibold text-slate-950">{tr(value)}</div>
                   </div>
                 ))}
               </div>
@@ -310,9 +333,9 @@ export function LandingPage() {
         <section id="features" className="border-t border-slate-200 bg-white py-16">
           <div className="mx-auto max-w-[1180px] px-4 md:px-6">
             <div className="max-w-2xl">
-              <h2 className="text-2xl font-semibold tracking-tight text-slate-950 md:text-3xl">Everything needed to turn behaviour into business action</h2>
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-950 md:text-3xl">{t("marketing.featuresTitle")}</h2>
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                The platform combines ingestion, tenant management, analytics pipelines, dashboards, and the future automation layer in one product.
+                {t("marketing.featuresBody")}
               </p>
             </div>
 
@@ -327,10 +350,10 @@ export function LandingPage() {
         <section id="workflow" className="border-t border-slate-200 bg-slate-50 py-16">
           <div className="mx-auto grid max-w-[1180px] gap-8 px-4 md:px-6 lg:grid-cols-[0.9fr_1.1fr]">
             <div>
-              <Badge variant="outline" className="border-slate-200 bg-white text-slate-600">Workflow</Badge>
-              <h2 className="mt-4 text-2xl font-semibold tracking-tight text-slate-950 md:text-3xl">From plugin install to intelligent action</h2>
+              <Badge variant="outline" className="border-slate-200 bg-white text-slate-600">{t("marketing.workflow")}</Badge>
+              <h2 className="mt-4 text-2xl font-semibold tracking-tight text-slate-950 md:text-3xl">{t("marketing.workflowTitle")}</h2>
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                Start with clean event collection. Then use Layer 2 metrics and automation rules to identify the customers most likely to buy, abandon, or return.
+                {t("marketing.workflowBody")}
               </p>
             </div>
 
@@ -340,7 +363,7 @@ export function LandingPage() {
                   <span className="grid h-9 w-9 place-items-center rounded-md bg-blue-50 text-sm font-semibold text-blue-700">
                     {index + 1}
                   </span>
-                  <span className="text-sm font-semibold text-slate-950">{item}</span>
+                  <span className="text-sm font-semibold text-slate-950">{tr(item)}</span>
                   {index < 3 ? <ArrowRight className="h-4 w-4 text-slate-400" /> : <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
                 </div>
               ))}
@@ -353,23 +376,23 @@ export function LandingPage() {
             <div>
               <Badge variant="outline" className="border-emerald-100 bg-emerald-50 text-emerald-700">
                 <ShieldCheck className="h-3 w-3" />
-                Trust and transparency
+                {tr("Trust and transparency")}
               </Badge>
-              <h2 className="mt-4 text-2xl font-semibold tracking-tight text-slate-950 md:text-3xl">Open-source trackers customers can inspect</h2>
+              <h2 className="mt-4 text-2xl font-semibold tracking-tight text-slate-950 md:text-3xl">{t("marketing.trustTitle")}</h2>
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                The plugins are open source, so users can check by themselves what the tracker collects before installing it on their store.
+                {t("marketing.trustBody")}
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
                 <Button asChild variant="outline" className="border-slate-200 bg-white text-slate-700">
                   <a href="https://github.com/GalylioAI/Client-Behaviour-Project/tree/wp" target="_blank" rel="noreferrer">
                     <Github className="h-4 w-4" />
-                    WordPress source
+                    {tr("WordPress source")}
                   </a>
                 </Button>
                 <Button asChild variant="outline" className="border-slate-200 bg-white text-slate-700">
                   <a href="https://github.com/GalylioAI/Client-Behaviour-Project/tree/Prestashop_module" target="_blank" rel="noreferrer">
                     <Github className="h-4 w-4" />
-                    PrestaShop source
+                    {tr("PrestaShop source")}
                   </a>
                 </Button>
               </div>
@@ -379,8 +402,8 @@ export function LandingPage() {
               {trustItems.map(({ icon: Icon, title, body }) => (
                 <div key={title} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                   <Icon className="h-5 w-5 text-blue-600" />
-                  <div className="mt-3 text-sm font-semibold text-slate-950">{title}</div>
-                  <p className="mt-1 text-xs leading-5 text-slate-600">{body}</p>
+                  <div className="mt-3 text-sm font-semibold text-slate-950">{tr(title)}</div>
+                  <p className="mt-1 text-xs leading-5 text-slate-600">{tr(body)}</p>
                 </div>
               ))}
             </div>
@@ -390,9 +413,9 @@ export function LandingPage() {
         <section id="pricing" className="border-t border-slate-200 bg-slate-50 py-16">
           <div className="mx-auto max-w-[1180px] px-4 md:px-6">
             <div className="max-w-2xl">
-              <h2 className="text-2xl font-semibold tracking-tight text-slate-950 md:text-3xl">Pricing that can grow with the product</h2>
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-950 md:text-3xl">{tr("Pricing that can grow with the product")}</h2>
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                Payment is delayed for now. The public pricing structure is ready so the product can later connect to checkout and automatic provisioning.
+                {tr("Payment is delayed for now. The public pricing structure is ready so the product can later connect to checkout and automatic provisioning.")}
               </p>
             </div>
 
@@ -406,16 +429,16 @@ export function LandingPage() {
                   )}
                 >
                   <div className="flex items-center justify-between">
-                    <h3 className="text-base font-semibold text-slate-950">{plan.name}</h3>
-                    {plan.highlighted ? <Badge className="bg-blue-600 text-white hover:bg-blue-600">Recommended</Badge> : null}
+                    <h3 className="text-base font-semibold text-slate-950">{tr(plan.name)}</h3>
+                    {plan.highlighted ? <Badge className="bg-blue-600 text-white hover:bg-blue-600">{tr("Recommended")}</Badge> : null}
                   </div>
-                  <div className="mt-4 text-2xl font-semibold tracking-tight text-slate-950">{plan.price}</div>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">{plan.description}</p>
+                  <div className="mt-4 text-2xl font-semibold tracking-tight text-slate-950">{tr(plan.price)}</div>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{tr(plan.description)}</p>
                   <div className="mt-5 space-y-3">
                     {plan.items.map((item) => (
                       <div key={item} className="flex items-center gap-2 text-sm text-slate-700">
                         <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                        {item}
+                        {tr(item)}
                       </div>
                     ))}
                   </div>
@@ -428,18 +451,18 @@ export function LandingPage() {
         <section className="border-t border-slate-200 bg-white py-12">
           <div className="mx-auto flex max-w-[1180px] flex-col justify-between gap-5 px-4 md:flex-row md:items-center md:px-6">
             <div>
-              <h2 className="text-xl font-semibold tracking-tight text-slate-950">Ready to connect a store?</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">Create the workspace, install the plugin, and watch live behaviour arrive.</p>
+              <h2 className="text-xl font-semibold tracking-tight text-slate-950">{t("marketing.readyTitle")}</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">{t("marketing.readyBody")}</p>
             </div>
             <div className="flex flex-wrap gap-3">
               <Button asChild className="bg-blue-600 hover:bg-blue-700">
                 <Link href="/start">
-                  Start now
+                  {t("marketing.startNow")}
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
               <Button asChild variant="outline" className="border-slate-200 bg-white text-slate-700">
-                <Link href="/login">Login</Link>
+                <Link href="/login">{t("common.login")}</Link>
               </Button>
             </div>
           </div>

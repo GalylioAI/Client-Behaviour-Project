@@ -120,6 +120,7 @@ export interface SimpleRow {
   label: string
   value: number
   secondaryValue?: string
+  href?: string
 }
 
 // Dashboard State Types

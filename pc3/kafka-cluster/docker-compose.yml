@@ -130,6 +130,7 @@ services:
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__WEBSERVER__SECRET_KEY: "change-me-please"
       AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
       # Connections to external services — reachable over LAN
       AIRFLOW_CONN_CLICKHOUSE_DEFAULT: "http://admin:changeme@192.168.1.106:8123/tracer"
       AIRFLOW_CONN_KAFKA_DEFAULT: "kafka://192.168.1.105:9092,192.168.1.106:9092,192.168.1.109:9092"
@@ -193,7 +194,7 @@ services:
       context: ./mlops/runner
     container_name: mlops-runner
     restart: unless-stopped
-    command: ["sleep", "infinity"]
+    command: ["python", "-m", "behavior_mlops.service"]
     environment:
       CLICKHOUSE_URL: "http://admin:changeme@192.168.1.106:8123/tracer"
       MLOPS_MINIO_ENDPOINT: "http://192.168.1.106:9002"
@@ -203,6 +204,7 @@ services:
       AWS_SECRET_ACCESS_KEY: "${MINIO_ROOT_PASSWORD:-minioadmin123}"
       DVC_REMOTE_URL: "s3://dvc"
       DVC_REMOTE_NAME: "minio"
+      MLOPS_RUNNER_PORT: "8600"
       PYTHONPATH: "/workspace/mlops/src"
     volumes:
       - ./mlops:/workspace/mlops

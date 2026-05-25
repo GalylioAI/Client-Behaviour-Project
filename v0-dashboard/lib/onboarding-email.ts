@@ -202,8 +202,13 @@ export async function prepareOnboardingEmail(input: CreateOnboardingEmailInput) 
   }
 }
 
-export async function loadOnboardingEmails(tenantId?: string): Promise<PreparedOnboardingEmail[]> {
+export async function loadOnboardingEmails(tenantId?: string, siteId?: string): Promise<PreparedOnboardingEmail[]> {
   await ensureEmailOutboxSchema()
+
+  const filters = [
+    tenantId ? `tenant_id = ${sqlString(tenantId)}` : "",
+    siteId ? `site_id = ${sqlString(siteId)}` : "",
+  ].filter(Boolean)
 
   const rows = await clickhouseQuery(`
     SELECT
@@ -223,7 +228,7 @@ export async function loadOnboardingEmails(tenantId?: string): Promise<PreparedO
       sent_at,
       updated_at
     FROM tracer.onboarding_email_outbox
-    ${tenantId ? `WHERE tenant_id = ${sqlString(tenantId)}` : ""}
+    ${filters.length ? `WHERE ${filters.join(" AND ")}` : ""}
     ORDER BY created_at DESC
     LIMIT 100
   `)

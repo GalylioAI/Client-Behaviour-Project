@@ -32,6 +32,48 @@ function fmtMoneyTnd(value: number | null) {
   return value == null ? "—" : `${value.toFixed(2)} TND`
 }
 
+function productLabelFromUrl(value?: string) {
+  if (!value) return ""
+  try {
+    const url = new URL(value, "https://example.com")
+    const segment = url.pathname.split("/").filter(Boolean).pop() || ""
+    return segment
+      .replace(/\.html?$/i, "")
+      .replace(/^\d+[-_]/, "")
+      .replace(/[-_]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+  } catch {
+    return ""
+  }
+}
+
+function isGenericProductLabel(value?: string) {
+  return [
+    "accueil",
+    "home",
+    "recherche",
+    "search",
+    "produit",
+    "produits",
+    "product",
+    "products",
+    "promos",
+    "promotion",
+    "الرئيسية",
+  ].includes((value || "").trim().toLowerCase())
+}
+
+function absoluteProductUrl(value: string | undefined, domain: string) {
+  if (!value) return undefined
+  try {
+    return new URL(value).toString()
+  } catch {
+    if (!domain || !value.startsWith("/")) return undefined
+    return new URL(value, `https://${domain}`).toString()
+  }
+}
+
 export function buildKpis(data: BehaviorInsights): KPIData[] {
   const overview = data.business_overview
   return [
@@ -146,9 +188,12 @@ export function buildTopPaths(data: BehaviorInsights): SimpleRow[] {
 export function buildTopProducts(data: BehaviorInsights): SimpleRow[] {
   return data.merchandising.top_products.map((product) => ({
     id: product.product_id,
-    label: product.product_name || `Product ${product.product_id}`,
+    label: product.product_name && !isGenericProductLabel(product.product_name)
+      ? product.product_name
+      : productLabelFromUrl(product.product_url) || `Product ${product.product_id}`,
     value: product.product_views,
     secondaryValue: `${product.engagement_events} engagement events`,
+    href: absoluteProductUrl(product.product_url, data.operations.site.domain),
   }))
 }
 

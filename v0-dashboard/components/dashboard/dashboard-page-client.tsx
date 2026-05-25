@@ -1,26 +1,31 @@
 "use client"
 
-import { useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react"
 import Link from "next/link"
 import {
   Activity,
   AlertTriangle,
   BarChart3,
   Bell,
-  Brain,
+  Bot,
   CalendarDays,
   ChevronDown,
   CircleDollarSign,
   Database,
   Download,
+  ExternalLink,
   Gauge,
   Globe2,
   KeyRound,
   Layers3,
   LayoutDashboard,
   LineChart as LineChartIcon,
+  Loader2,
   LogOut,
+  MessageCircle,
   PackageSearch,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   Radio,
   RefreshCw,
@@ -34,6 +39,7 @@ import {
   TrendingUp,
   Users,
   Workflow,
+  X,
 } from "lucide-react"
 import {
   Area,
@@ -54,20 +60,25 @@ import {
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Slider } from "@/components/ui/slider"
+import { LanguageSwitcher } from "@/components/language-switcher"
 import {
   buildDataQuality,
   buildEventMix,
   buildFunnel,
-  buildKpis,
   buildProductInsights,
   buildTopProducts,
   buildTopReferrers,
 } from "@/lib/dashboard-adapter"
 import type { BehaviorInsights } from "@/lib/insights"
+import { useI18n } from "@/lib/i18n"
 import type { TenantSiteAccess } from "@/lib/tenant-access"
 import { cn } from "@/lib/utils"
 
 const chartColors = ["#1769E8", "#14B8A6", "#6366F1", "#F59E0B", "#EF4444", "#64748B"]
+const SIDEBAR_STORAGE_KEY = "behaviourai:sidebar-open"
+const PAGE_HEADER_STORAGE_KEY = "behaviourai:page-header-open"
+const AUTOMATION_INTENSITY_STORAGE_KEY = "behaviourai:automation-intensity"
 
 type DashboardView =
   | "overview"
@@ -75,7 +86,9 @@ type DashboardView =
   | "funnels"
   | "audience"
   | "products"
-  | "ai"
+  | "smart-actions"
+  | "smart-intent"
+  | "smart-recommendations"
   | "reports"
   | "sites"
   | "pipelines"
@@ -90,35 +103,43 @@ const viewMeta: Record<DashboardView, { title: string; description: string }> = 
   },
   live: {
     title: "Live Events",
-    description: "Watch accepted tracker events, event mix, recent traffic sources, and data freshness for this site.",
+    description: "Debug the tracker stream, accepted events, event mix, and freshness for this site.",
   },
   funnels: {
-    title: "Funnels",
+    title: "Conversion Funnels",
     description: "Understand where sessions move from product discovery to cart, checkout, and purchase.",
   },
   audience: {
-    title: "Audience",
-    description: "Review visitor loyalty, session quality, traffic channels, devices, and customer account signals.",
+    title: "Traffic And Audience",
+    description: "Review acquisition channels, browser referrers, campaigns, devices, visitor loyalty, and customer account signals.",
   },
   products: {
     title: "Products",
     description: "Rank products by views, clicks, add-to-cart activity, and engagement opportunities.",
   },
-  ai: {
-    title: "AI Insights",
-    description: "Rules-based recommendations today, with model readiness signals for future ML scoring.",
+  "smart-actions": {
+    title: "Smart Actions",
+    description: "Score customer intent, prepare product recommendations, and control the automation layer from one place.",
+  },
+  "smart-intent": {
+    title: "Purchase Intent",
+    description: "Prioritize visitors and sessions by buying intent, with reasons, signals, and next-best actions.",
+  },
+  "smart-recommendations": {
+    title: "Recommendations",
+    description: "Review journey-based product recommendations and prepared email drafts before enabling real sending.",
   },
   reports: {
-    title: "Reports",
-    description: "Reusable reporting views for trends, event mix, traffic, exports, and operational quality.",
+    title: "Reports And Exports",
+    description: "Reusable reporting views for trends, event mix, exports, and operational quality.",
   },
   sites: {
     title: "Sites",
     description: "Manage the current website, installation status, plugin connection, and tenant boundaries.",
   },
   pipelines: {
-    title: "Pipelines",
-    description: "Monitor Layer 2 analysis jobs, infrastructure health, and data processing readiness.",
+    title: "Data Pipelines",
+    description: "Monitor analysis jobs, infrastructure health, data quality, and model readiness.",
   },
   settings: {
     title: "Settings",
@@ -126,21 +147,61 @@ const viewMeta: Record<DashboardView, { title: string; description: string }> = 
   },
 }
 
-const navigation = [
+const mainNavigation = [
   { label: "Dashboard", icon: LayoutDashboard, view: "overview" as const },
   { label: "Live Events", icon: Activity, view: "live" as const },
   { label: "Funnels", icon: BarChart3, view: "funnels" as const },
-  { label: "Audience", icon: Users, view: "audience" as const },
+  { label: "Traffic", icon: Users, view: "audience" as const },
   { label: "Products", icon: PackageSearch, view: "products" as const },
-  { label: "AI Insights", icon: Brain, view: "ai" as const },
   { label: "Reports", icon: LineChartIcon, view: "reports" as const },
   { label: "Sites", icon: Globe2, view: "sites" as const },
+]
+
+const smartActionsNavigation = [
+  { label: "Smart Actions", icon: Sparkles, view: "smart-actions" as const },
+  { label: "Purchase Intent", icon: Gauge, view: "smart-intent" as const },
+  { label: "Recommendations", icon: Send, view: "smart-recommendations" as const },
+]
+
+const systemNavigation = [
   { label: "API Keys", icon: KeyRound, href: "/keys" },
   { label: "Pipelines", icon: Workflow, view: "pipelines" as const },
   { label: "Settings", icon: Settings, view: "settings" as const },
 ]
 
+const viewTranslationKeys: Record<DashboardView, string> = {
+  overview: "overview",
+  live: "live",
+  funnels: "funnels",
+  audience: "audience",
+  products: "products",
+  "smart-actions": "smartActions",
+  "smart-intent": "intent",
+  "smart-recommendations": "recommendations",
+  reports: "reports",
+  sites: "sites",
+  pipelines: "pipelines",
+  settings: "settings",
+}
+
+const navigationTranslationKeys: Record<string, string> = {
+  Dashboard: "nav.overview",
+  "Live Events": "nav.live",
+  Funnels: "nav.funnels",
+  Traffic: "nav.audience",
+  Products: "nav.products",
+  Reports: "nav.reports",
+  Sites: "nav.sites",
+  "Smart Actions": "nav.smartActions",
+  "Purchase Intent": "nav.intent",
+  Recommendations: "nav.recommendations",
+  "API Keys": "common.apiKeys",
+  Pipelines: "nav.pipelines",
+  Settings: "nav.settings",
+}
+
 function normalizeView(value: string | null | undefined): DashboardView {
+  if (value === "ai") return "smart-actions"
   return value && value in viewMeta ? (value as DashboardView) : "overview"
 }
 
@@ -192,7 +253,22 @@ function timeAgo(value: string | null | undefined) {
 }
 
 function cleanLabel(value: string) {
-  return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+  return value
+    .replace(/layer2/gi, "insights")
+    .replace(/layer 2/gi, "insights")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function translateProductSecondary(value: string, tr: (text: string) => string) {
+  return value.replace(/\bengagement events\b/gi, tr("engagement events"))
+}
+
+function translateMetricFragment(value: string, tr: (text: string) => string) {
+  return value
+    .replace(/\bof sessions\b/gi, tr("of sessions"))
+    .replace(/\bpurchases\b/gi, tr("purchases"))
+    .replace(/\bsessions\b/gi, tr("sessions"))
 }
 
 function csvValue(value: string | number | null | undefined) {
@@ -599,6 +675,7 @@ function SiteSelector({
   currentSite: DashboardSite
   activeView: DashboardView
 }) {
+  const { t } = useI18n()
   const [isOpen, setIsOpen] = useState(false)
   const currentSiteId = currentSite.site_id || sites[0]?.site_id || ""
   const sortedSites = sites.length ? sites : [currentSite]
@@ -675,8 +752,8 @@ function SiteSelector({
                 <Plus className="h-4 w-4" />
               </div>
               <span>
-                <span className="block text-xs font-semibold">Add website</span>
-                <span className="block text-[11px] font-normal text-slate-500">Generate keys under this account</span>
+                <span className="block text-xs font-semibold">{t("nav.addWebsite")}</span>
+                <span className="block text-[11px] font-normal text-slate-500">{t("nav.addWebsiteHelper")}</span>
               </span>
             </Link>
           </div>
@@ -690,71 +767,122 @@ function Sidebar({
   sites,
   currentSite,
   activeView,
+  isCollapsed,
+  onToggleSidebar,
 }: {
   sites: DashboardSite[]
   currentSite: DashboardSite
   activeView: DashboardView
+  isCollapsed: boolean
+  onToggleSidebar: () => void
 }) {
+  const { t } = useI18n()
   const siteId = currentSite.site_id || sites[0]?.site_id || ""
   const siteQuery = siteId ? `?site_id=${encodeURIComponent(siteId)}` : ""
   const appHref = (view: DashboardView) => appHrefForSite(siteId, view)
+  const renderNavItem = (item: { label: string; icon: typeof Activity; view?: DashboardView; href?: string }, compact = false) => {
+    const isActive = item.view === activeView
+    const Icon = item.icon
+    const label = t(navigationTranslationKeys[item.label] || item.label)
+    const content = (
+      <>
+        <Icon className="h-4 w-4 shrink-0" />
+        <span className={cn("truncate transition-opacity duration-200", isCollapsed && "sr-only")}>{label}</span>
+      </>
+    )
+    const className = cn(
+      "flex h-9 w-full items-center rounded-md text-sm font-medium transition-colors",
+      isCollapsed ? "justify-center px-0" : "gap-3 px-3",
+      compact && !isCollapsed && "h-8 pl-8 text-xs",
+      compact && isCollapsed && "h-8",
+      isActive ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+    )
+
+    return item.view ? (
+      <Link key={item.label} href={appHref(item.view)} className={className} title={label} aria-label={label}>
+        {content}
+      </Link>
+    ) : item.href ? (
+      <Link key={item.label} href={`${item.href}${siteQuery}`} className={className} title={label} aria-label={label}>
+        {content}
+      </Link>
+    ) : (
+      <button key={item.label} className={className} title={label} aria-label={label}>
+        {content}
+      </button>
+    )
+  }
 
   return (
-    <aside className="hidden h-screen border-r border-slate-200 bg-white lg:sticky lg:top-0 lg:flex lg:flex-col">
-      <div className="flex h-16 items-center gap-3 border-b border-slate-100 px-5">
+    <aside className="hidden h-screen min-w-0 overflow-hidden border-r border-slate-200 bg-white transition-all duration-300 ease-out lg:sticky lg:top-0 lg:flex lg:flex-col">
+      <div className={cn("flex h-16 items-center border-b border-slate-100 transition-all duration-300", isCollapsed ? "justify-center px-2" : "gap-3 px-5")}>
         <div className="grid h-8 w-8 place-items-center rounded-md bg-blue-600 text-white shadow-sm">
           <Activity className="h-4 w-4" />
         </div>
-        <div>
+        <div className={cn("min-w-0 overflow-hidden whitespace-nowrap transition-all duration-200", isCollapsed ? "w-0 opacity-0" : "w-36 opacity-100")}>
           <div className="text-sm font-semibold text-slate-950">BehaviourAI</div>
-          <div className="text-xs text-slate-500">Intelligence platform</div>
+          <div className="text-xs text-slate-500">{t("common.behaviourPlatform")}</div>
         </div>
       </div>
 
-      <div className="border-b border-slate-100 px-4 py-4">
-        <SiteSelector sites={sites} currentSite={currentSite} activeView={activeView} />
+      <div className={cn("border-b border-slate-100 py-4 transition-all duration-300", isCollapsed ? "px-3" : "px-4")}>
+        {isCollapsed ? (
+          <Link
+            href={appHref("sites")}
+            title={currentSite.domain || currentSite.site_id || "Current website"}
+            aria-label="Current website"
+            className="mx-auto grid h-10 w-10 place-items-center rounded-md border border-slate-200 bg-slate-50 text-slate-600 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+          >
+            <Globe2 className="h-4 w-4" />
+          </Link>
+        ) : (
+          <SiteSelector sites={sites} currentSite={currentSite} activeView={activeView} />
+        )}
       </div>
 
-      <nav className="flex-1 space-y-1 px-3 py-3">
-        {navigation.map((item) => {
-          const content = (
-            <>
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </>
-          )
-          const className = cn(
-            "flex h-9 w-full items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors",
-            item.view === activeView ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
-          )
+      <nav className={cn("flex-1 space-y-1 py-3 transition-all duration-300", isCollapsed ? "px-3" : "px-3")}>
+        {mainNavigation.map((item) => renderNavItem(item))}
 
-          return item.view ? (
-            <Link key={item.label} href={appHref(item.view)} className={className}>
-              {content}
-            </Link>
-          ) : item.href ? (
-            <Link key={item.label} href={`${item.href}${siteQuery}`} className={className}>
-              {content}
-            </Link>
-          ) : (
-            <button key={item.label} className={className}>
-              {content}
-            </button>
-          )
-        })}
+        <div className="my-3 space-y-1 border-t border-slate-100 pt-3">
+          {smartActionsNavigation.map((item, index) => renderNavItem(item, index > 0))}
+        </div>
+
+        {systemNavigation.map((item) => renderNavItem(item))}
       </nav>
 
-      <div className="border-t border-slate-100 p-4">
-        <button className="flex h-9 w-full items-center gap-3 rounded-md px-3 text-sm font-medium text-slate-500 hover:bg-slate-100">
-          <ChevronDown className="h-4 w-4 rotate-90" />
-          Collapse
+      <div className={cn("border-t border-slate-100 transition-all duration-300", isCollapsed ? "p-3" : "p-4")}>
+        <button
+          type="button"
+          onClick={onToggleSidebar}
+          className={cn(
+            "flex h-9 w-full items-center rounded-md text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-950",
+            isCollapsed ? "justify-center px-0" : "gap-3 px-3"
+          )}
+          title={isCollapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar")}
+          aria-label={isCollapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar")}
+        >
+          {isCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          <span className={cn("truncate", isCollapsed && "sr-only")}>{isCollapsed ? t("nav.expand") : t("nav.collapse")}</span>
         </button>
       </div>
     </aside>
   )
 }
 
-function Topbar({ siteLabel, siteId, latestEvent }: { siteLabel: string; siteId: string; latestEvent: string | null }) {
+function Topbar({
+  siteLabel,
+  siteId,
+  latestEvent,
+  isSidebarOpen,
+  onToggleSidebar,
+}: {
+  siteLabel: string
+  siteId: string
+  latestEvent: string | null
+  isSidebarOpen: boolean
+  onToggleSidebar: () => void
+}) {
+  const { t } = useI18n()
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" })
     window.location.href = "/login"
@@ -763,19 +891,30 @@ function Topbar({ siteLabel, siteId, latestEvent }: { siteLabel: string; siteId:
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-4 border-b border-slate-200 bg-white/90 px-4 backdrop-blur md:px-6">
       <div className="flex min-w-0 items-center gap-3">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="hidden text-slate-500 hover:bg-slate-100 hover:text-slate-950 lg:inline-flex"
+          onClick={onToggleSidebar}
+          aria-label={isSidebarOpen ? t("nav.collapseSidebar") : t("nav.expandSidebar")}
+          title={isSidebarOpen ? t("nav.collapseSidebar") : t("nav.expandSidebar")}
+        >
+          {isSidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+        </Button>
         <Badge className="border-blue-100 bg-blue-50 text-blue-700 hover:bg-blue-50" variant="outline">
           <Radio className="h-3 w-3" />
-          Live
+          {t("common.live")}
         </Badge>
         <div className="hidden min-w-0 md:block">
           <div className="truncate text-sm font-semibold text-slate-950">{siteLabel}</div>
-          <div className="text-xs text-slate-500">Last event {timeAgo(latestEvent)}</div>
+          <div className="text-xs text-slate-500">{t("common.lastEvent")} {timeAgo(latestEvent)}</div>
         </div>
       </div>
 
       <div className="hidden h-9 min-w-[280px] max-w-[420px] flex-1 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 lg:flex">
         <Search className="h-4 w-4 text-slate-400" />
-        <span className="text-sm text-slate-500">Search events, users, funnels...</span>
+        <span className="text-sm text-slate-500">{t("common.searchPlaceholder")}</span>
         <kbd className="ml-auto rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] font-medium text-slate-400">⌘K</kbd>
       </div>
 
@@ -783,32 +922,33 @@ function Topbar({ siteLabel, siteId, latestEvent }: { siteLabel: string; siteId:
         <Button asChild variant="outline" size="sm" className="hidden border-slate-200 bg-white text-slate-700 md:inline-flex">
           <Link href={`/keys?site_id=${encodeURIComponent(siteId)}`}>
             <KeyRound className="h-4 w-4" />
-            API Keys
+            {t("common.apiKeys")}
           </Link>
         </Button>
         <Button asChild variant="outline" size="sm" className="hidden border-slate-200 bg-white text-slate-700 md:inline-flex">
           <Link href="/setup">
             <KeyRound className="h-4 w-4" />
-            Setup
+            {t("common.setup")}
           </Link>
         </Button>
         <Button asChild variant="outline" size="sm" className="hidden border-slate-200 bg-white text-slate-700 md:inline-flex">
           <Link href={`/debug?site_id=${encodeURIComponent(siteId)}`}>
             <Activity className="h-4 w-4" />
-            Debug
+            {t("common.debug")}
           </Link>
         </Button>
         <Button variant="outline" size="sm" className="hidden border-slate-200 bg-white text-slate-700 md:inline-flex">
           <CalendarDays className="h-4 w-4" />
-          Last 7 days
+          {t("common.last7Days")}
         </Button>
         <Button variant="ghost" size="icon-sm" className="text-slate-500">
           <Bell className="h-4 w-4" />
         </Button>
         <div className="hidden h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 md:flex">
           <div className="grid h-5 w-5 place-items-center rounded-full bg-slate-900 text-[10px] font-semibold text-white">IS</div>
-          <span className="text-xs font-medium text-slate-700">Admin</span>
+          <span className="text-xs font-medium text-slate-700">{t("common.admin")}</span>
         </div>
+        <LanguageSwitcher compact />
         <Button type="button" variant="ghost" size="icon-sm" className="text-slate-500" onClick={logout}>
           <LogOut className="h-4 w-4" />
         </Button>
@@ -965,6 +1105,7 @@ function SalesMetricCard({
 }
 
 function SalesPerformanceSection({ insights }: { insights: BehaviorInsights }) {
+  const { tr } = useI18n()
   const [range, setRange] = useState<SalesRange>("daily")
   const sales = useMemo(() => buildSalesView(insights, range), [insights, range])
   const hasRevenue = sales.totals.revenue > 0
@@ -977,8 +1118,8 @@ function SalesPerformanceSection({ insights }: { insights: BehaviorInsights }) {
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Sales / Revenue</div>
-            <h2 className="mt-1 text-lg font-semibold text-slate-950">Confirmed Revenue</h2>
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{tr("Sales / Revenue")}</div>
+            <h2 className="mt-1 text-lg font-semibold text-slate-950">{tr("Confirmed Revenue")}</h2>
           </div>
           <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1">
             {salesRanges.map((item) => (
@@ -991,7 +1132,7 @@ function SalesPerformanceSection({ insights }: { insights: BehaviorInsights }) {
                   range === item.id ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-950"
                 )}
               >
-                {item.label}
+                {tr(item.label)}
               </button>
             ))}
           </div>
@@ -1004,7 +1145,7 @@ function SalesPerformanceSection({ insights }: { insights: BehaviorInsights }) {
           <MovementBadge delta={sales.revenueDelta} />
         </div>
         <div className="mt-2 text-xs font-medium text-slate-500">
-          {hasRevenue ? `Compared with the ${sales.rangeConfig.compareLabel}` : "Waiting for purchase events with order totals"}
+          {hasRevenue ? `${tr("Compared with the")} ${tr(sales.rangeConfig.compareLabel)}` : tr("Waiting for purchase events with order totals")}
         </div>
 
         <div className="mt-6 h-[320px]">
@@ -1029,9 +1170,9 @@ function SalesPerformanceSection({ insights }: { insights: BehaviorInsights }) {
               <Tooltip
                 formatter={(value, name) => [
                   name === "revenue" ? fmtMoneyAmount(Number(value)) : fmtMoneyAmount(Number(value)),
-                  name === "revenue" ? "Revenue" : "Average",
+                  name === "revenue" ? tr("Revenue") : tr("Average"),
                 ]}
-                labelFormatter={(label) => `Period: ${label}`}
+                labelFormatter={(label) => `${tr("Period")}: ${label}`}
               />
               <Line type="monotone" dataKey="average" stroke="#94A3B8" strokeDasharray="5 5" strokeWidth={1.4} dot={false} />
               <Area type="monotone" dataKey="revenue" stroke="#1769E8" fill="url(#salesRevenueFill)" strokeWidth={3} dot={false} activeDot={{ r: 5 }} />
@@ -1042,30 +1183,30 @@ function SalesPerformanceSection({ insights }: { insights: BehaviorInsights }) {
 
       <aside className="space-y-4">
         <SalesMetricCard
-          title="Conversion Rate"
+          title={tr("Conversion Rate")}
           value={fmtPct(sales.conversionRate)}
           delta={sales.conversionDelta}
-          helper="Purchase sessions divided by total sessions."
+          helper={tr("Purchase sessions divided by total sessions.")}
         />
         <SalesMetricCard
-          title="Average Order Value"
+          title={tr("Average Order Value")}
           value={fmtMoneyAmount(sales.averageOrderValue)}
           delta={sales.averageOrderValueDelta}
-          helper="Revenue divided by completed purchases."
+          helper={tr("Revenue divided by completed purchases.")}
         />
         <SalesMetricCard
-          title="Cart Abandonment"
+          title={tr("Cart Abandonment")}
           value={fmtPct(sales.cartAbandonmentRate)}
           delta={sales.cartAbandonmentDelta}
           positiveWhenUp={false}
-          helper="Users who added to cart but left without buying."
+          helper={tr("Users who added to cart but left without buying.")}
         />
         <SalesMetricCard
-          title="Order Losses"
+          title={tr("Order Losses")}
           value={fmtInt(lifecycleLosses)}
           delta={0}
           positiveWhenUp={false}
-          helper={`${fmtMoneyAmount(insights.business_overview.sales.cancelled_revenue_tnd)} from cancelled, refunded, or failed orders.`}
+          helper={`${fmtMoneyAmount(insights.business_overview.sales.cancelled_revenue_tnd)} ${tr("from cancelled, refunded, or failed orders.")}`}
         />
       </aside>
     </section>
@@ -1073,6 +1214,7 @@ function SalesPerformanceSection({ insights }: { insights: BehaviorInsights }) {
 }
 
 function BusinessPulseRow({ metric }: { metric: BusinessPulseMetric }) {
+  const { tr } = useI18n()
   const tone = trendTone(metric.deltaPct, metric.positiveWhenUp)
   return (
     <Link
@@ -1086,10 +1228,10 @@ function BusinessPulseRow({ metric }: { metric: BusinessPulseMetric }) {
     >
       <div className="min-w-0">
         <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-semibold text-slate-950">{metric.label}</span>
+          <span className="truncate text-sm font-semibold text-slate-950">{tr(metric.label)}</span>
           {tone === "positive" ? <TrendingUp className="h-4 w-4 text-emerald-600" /> : tone === "negative" ? <TrendingDown className="h-4 w-4 text-red-600" /> : null}
         </div>
-        <div className="mt-1 truncate text-xs text-slate-500">{metric.sublabel} · {metric.baselineLabel}</div>
+        <div className="mt-1 truncate text-xs text-slate-500">{tr(metric.sublabel)} · {tr(metric.baselineLabel)}</div>
       </div>
       <div className="hidden sm:block">
         <MiniSparkline metric={metric} />
@@ -1108,12 +1250,13 @@ function BusinessPulseRow({ metric }: { metric: BusinessPulseMetric }) {
 }
 
 function BusinessPulsePanel({ insights }: { insights: BehaviorInsights }) {
+  const { tr } = useI18n()
   const metrics = buildPulseMetrics(insights)
   return (
     <Surface
-      title="Business Pulse"
-      description="Current store performance compared with the normal daily average. Open any row for the full panel."
-      action={<Badge variant="outline" className="border-blue-100 bg-blue-50 text-blue-700 hover:bg-blue-50">Stock-style movement</Badge>}
+      title={tr("Business Pulse")}
+      description={tr("Current store performance compared with the normal daily average. Open any row for the full panel.")}
+      action={<Badge variant="outline" className="border-blue-100 bg-blue-50 text-blue-700 hover:bg-blue-50">{tr("Stock-style movement")}</Badge>}
       className="bg-gradient-to-br from-white to-blue-50/40"
     >
       <div className="grid gap-3 xl:grid-cols-2">
@@ -1126,6 +1269,7 @@ function BusinessPulsePanel({ insights }: { insights: BehaviorInsights }) {
 }
 
 function ExecutiveShortcutGrid({ insights }: { insights: BehaviorInsights }) {
+  const { tr } = useI18n()
   const siteId = insights.operations.site.site_id || "tdiscount"
   const topProduct = buildTopProducts(insights)[0]
   const topReferrer = buildTopReferrers(insights)[0]
@@ -1134,23 +1278,23 @@ function ExecutiveShortcutGrid({ insights }: { insights: BehaviorInsights }) {
     {
       title: "Biggest Revenue Leak",
       value: `${dropoff.dropoff_pct_points.toFixed(1)} pts`,
-      helper: `${cleanLabel(dropoff.from_stage)} to ${cleanLabel(dropoff.to_stage)}`,
+      helper: `${tr(cleanLabel(dropoff.from_stage))} ${tr("to")} ${tr(cleanLabel(dropoff.to_stage))}`,
       href: `/app?site_id=${encodeURIComponent(siteId)}&view=funnels`,
       icon: BarChart3,
       tone: "red",
     },
     {
       title: "Product Opportunity",
-      value: topProduct ? topProduct.label : "Waiting",
-      helper: topProduct ? topProduct.secondaryValue : "No product signal yet",
+      value: topProduct ? topProduct.label : tr("Waiting"),
+      helper: topProduct ? translateProductSecondary(topProduct.secondaryValue, tr) : tr("No product signal yet"),
       href: `/app?site_id=${encodeURIComponent(siteId)}&view=products`,
       icon: PackageSearch,
       tone: "blue",
     },
     {
       title: "Best Traffic Signal",
-      value: topReferrer ? topReferrer.label : "Direct",
-      helper: topReferrer ? topReferrer.secondaryValue : "No referrer signal yet",
+      value: topReferrer ? tr(topReferrer.label) : tr("Direct"),
+      helper: topReferrer ? translateMetricFragment(topReferrer.secondaryValue, tr) : tr("No referrer signal yet"),
       href: `/app?site_id=${encodeURIComponent(siteId)}&view=audience`,
       icon: Globe2,
       tone: "teal",
@@ -1175,7 +1319,7 @@ function ExecutiveShortcutGrid({ insights }: { insights: BehaviorInsights }) {
               <Plus className="h-4 w-4" />
             </span>
           </div>
-          <div className="mt-4 text-xs font-medium text-slate-500">{item.title}</div>
+          <div className="mt-4 text-xs font-medium text-slate-500">{tr(item.title)}</div>
           <div className="mt-2 line-clamp-1 text-xl font-semibold text-slate-950">{item.value}</div>
           <div className="mt-2 line-clamp-2 text-sm leading-5 text-slate-500">{item.helper}</div>
         </Link>
@@ -1185,19 +1329,20 @@ function ExecutiveShortcutGrid({ insights }: { insights: BehaviorInsights }) {
 }
 
 function FunnelCard({ insights }: { insights: BehaviorInsights }) {
+  const { tr } = useI18n()
   const funnel = buildFunnel(insights)
   const max = Math.max(...funnel.stages.map((stage) => stage.value), 1)
   return (
     <Surface
-      title="Conversion Funnel"
-      description={`Overall conversion ${fmtPct(funnel.totalConversionRate)} from sessions to purchase.`}
-      action={<StatusDot status="processing" label="Layer 2" />}
+      title={tr("Conversion Funnel")}
+      description={`${tr("Overall conversion")} ${fmtPct(funnel.totalConversionRate)} ${tr("from sessions to purchase.")}`}
+      action={<StatusDot status="processing" label={tr("Insight engine")} />}
     >
       <div className="space-y-4">
         {funnel.stages.map((stage, index) => (
           <div key={stage.id} className="grid gap-2">
             <div className="flex items-center justify-between gap-4 text-xs">
-              <span className="font-medium text-slate-700">{stage.name}</span>
+              <span className="font-medium text-slate-700">{tr(stage.name)}</span>
               <span className="font-semibold tabular-nums text-slate-950">{fmtInt(stage.value)}</span>
             </div>
             <div className="h-8 overflow-hidden rounded-md bg-slate-100">
@@ -1219,12 +1364,13 @@ function FunnelCard({ insights }: { insights: BehaviorInsights }) {
 }
 
 function LiveEventStream({ insights }: { insights: BehaviorInsights }) {
+  const { tr } = useI18n()
   const events = insights.operations.recent_events
   return (
     <Surface
-      title="Real-time Event Stream"
-      description={`${fmtInt(insights.dataset.rows)} raw events observed in the current window.`}
-      action={<StatusDot status={events.length ? "healthy" : "neutral"} label={events.length ? "Receiving" : "Waiting"} />}
+      title={tr("Real-time Event Stream")}
+      description={`${fmtInt(insights.dataset.rows)} ${tr("raw events observed in the current window.")}`}
+      action={<StatusDot status={events.length ? "healthy" : "neutral"} label={events.length ? tr("Receiving") : tr("Waiting")} />}
       className="xl:col-span-2"
     >
       <div className="space-y-3">
@@ -1235,7 +1381,7 @@ function LiveEventStream({ insights }: { insights: BehaviorInsights }) {
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-semibold text-slate-950">{cleanLabel(event.event_name)}</span>
+                <span className="text-sm font-semibold text-slate-950">{tr(cleanLabel(event.event_name))}</span>
                 <Badge variant="outline" className="border-slate-200 bg-white text-slate-500">{event.event_type}</Badge>
               </div>
               <div className="mt-1 truncate text-xs text-slate-500">{compactUrl(event.page_url)}</div>
@@ -1248,7 +1394,7 @@ function LiveEventStream({ insights }: { insights: BehaviorInsights }) {
         ))}
         {!events.length ? (
           <div className="rounded-md border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
-            No recent events for this site yet.
+            {tr("No recent events for this site yet.")}
           </div>
         ) : null}
       </div>
@@ -1408,29 +1554,30 @@ function TrafficCard({ insights }: { insights: BehaviorInsights }) {
 }
 
 function AIAlertCard({ insights }: { insights: BehaviorInsights }) {
+  const { tr } = useI18n()
   const dropoff = insights.commercial_funnel.largest_dropoff
   const productNotes = buildProductInsights(insights)
   const topNote = productNotes[0]
   return (
     <Surface
-      title="AI Opportunity Alert"
-      description="Deterministic insight today, ready to become ML-backed later."
+      title={tr("AI Opportunity Alert")}
+      description={tr("Deterministic insight today, ready to become ML-backed later.")}
       className="border-red-100 bg-gradient-to-br from-white to-red-50/40"
-      action={<Badge className="border-red-100 bg-red-50 text-red-700 hover:bg-red-50" variant="outline">High impact</Badge>}
+      action={<Badge className="border-red-100 bg-red-50 text-red-700 hover:bg-red-50" variant="outline">{tr("High impact")}</Badge>}
     >
       <div className="flex items-start gap-3">
         <div className="grid h-9 w-9 place-items-center rounded-md bg-red-50 text-red-600">
           <AlertTriangle className="h-5 w-5" />
         </div>
         <div>
-          <h3 className="text-sm font-semibold text-slate-950">{topNote?.title || "Largest conversion leak detected"}</h3>
+          <h3 className="text-sm font-semibold text-slate-950">{topNote?.title || tr("Largest conversion leak detected")}</h3>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             {topNote?.description ||
-              `The biggest decline is from ${cleanLabel(dropoff.from_stage)} to ${cleanLabel(dropoff.to_stage)}.`}
+              `${tr("The biggest decline is from")} ${tr(cleanLabel(dropoff.from_stage))} ${tr("to")} ${tr(cleanLabel(dropoff.to_stage))}.`}
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Badge variant="outline" className="bg-white">Drop-off {dropoff.dropoff_pct_points.toFixed(2)} pts</Badge>
-            <Badge variant="outline" className="bg-white">Confidence: rules based</Badge>
+            <Badge variant="outline" className="bg-white">{tr("Drop-off")} {dropoff.dropoff_pct_points.toFixed(2)} pts</Badge>
+            <Badge variant="outline" className="bg-white">{tr("Confidence: rules based")}</Badge>
           </div>
         </div>
       </div>
@@ -1439,27 +1586,50 @@ function AIAlertCard({ insights }: { insights: BehaviorInsights }) {
 }
 
 function ProductEngagementCard({ insights }: { insights: BehaviorInsights }) {
+  const { tr } = useI18n()
   const rows = buildTopProducts(insights).slice(0, 5)
   return (
-    <Surface title="Product Engagement" description="Products ranked by views and observed engagement events.">
+    <Surface title={tr("Product Engagement")} description={tr("Products ranked by views and observed engagement events.")}>
       <div className="space-y-3">
-        {rows.map((row, index) => (
-          <div key={row.id} className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
-            <div className="grid h-7 w-7 place-items-center rounded-md bg-slate-100 text-xs font-semibold text-slate-500">{index + 1}</div>
-            <div className="min-w-0">
-              <div className="truncate text-sm font-medium text-slate-900">{row.label}</div>
-              <div className="text-xs text-slate-500">{row.secondaryValue}</div>
+        {rows.map((row, index) => {
+          const content = (
+            <>
+              <div className="grid h-7 w-7 place-items-center rounded-md bg-slate-100 text-xs font-semibold text-slate-500">{index + 1}</div>
+              <div className="min-w-0">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <span className="truncate text-sm font-medium text-slate-900">{row.label}</span>
+                  {row.href ? <ExternalLink className="h-3.5 w-3.5 shrink-0 text-slate-400" /> : null}
+                </div>
+                <div className="text-xs text-slate-500">{translateProductSecondary(row.secondaryValue, tr)}</div>
+              </div>
+              <div className="text-sm font-semibold tabular-nums text-slate-950">{fmtInt(row.value)}</div>
+            </>
+          )
+
+          return row.href ? (
+            <a
+              key={row.id}
+              href={row.href}
+              target="_blank"
+              rel="noreferrer"
+              className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-md p-1.5 transition hover:bg-slate-50"
+            >
+              {content}
+            </a>
+          ) : (
+            <div key={row.id} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 p-1.5">
+              {content}
             </div>
-            <div className="text-sm font-semibold tabular-nums text-slate-950">{fmtInt(row.value)}</div>
-          </div>
-        ))}
-        {!rows.length ? <p className="text-sm text-slate-500">No product events captured yet.</p> : null}
+          )
+        })}
+        {!rows.length ? <p className="text-sm text-slate-500">{tr("No product events captured yet.")}</p> : null}
       </div>
     </Surface>
   )
 }
 
 function SessionQualityCard({ insights }: { insights: BehaviorInsights }) {
+  const { tr } = useI18n()
   const quality = buildDataQuality(insights)
   const score = Math.round(
     Math.min(
@@ -1474,7 +1644,7 @@ function SessionQualityCard({ insights }: { insights: BehaviorInsights }) {
     { name: "Gap", value: Math.max(100 - score, 0) },
   ]
   return (
-    <Surface title="Session Quality Score" description="Composite of coverage, engagement depth, and visitor loyalty.">
+    <Surface title={tr("Session Quality Score")} description={tr("Composite of coverage, engagement depth, and visitor loyalty.")}>
       <div className="grid gap-5 sm:grid-cols-[170px_1fr]">
         <div className="relative h-40">
           <ResponsiveContainer width="100%" height="100%">
@@ -1488,18 +1658,854 @@ function SessionQualityCard({ insights }: { insights: BehaviorInsights }) {
           <div className="absolute inset-0 grid place-items-center text-center">
             <div>
               <div className="text-3xl font-semibold text-slate-950">{score}</div>
-              <div className="text-xs text-slate-500">Good</div>
+              <div className="text-xs text-slate-500">{tr("Good")}</div>
             </div>
           </div>
         </div>
         <div className="space-y-3">
-          <MetricLine label="Avg events/session" value={insights.audience.engagement.avg_events_per_session.toFixed(2)} />
-          <MetricLine label="Median duration" value={`${insights.audience.engagement.median_session_duration_sec.toFixed(0)}s`} />
-          <MetricLine label="Repeat visitors" value={fmtPct(insights.business_overview.reach.repeat_visitor_rate_pct)} />
-          <MetricLine label="Data coverage" value={fmtPct(quality.overallCoverage)} />
+          <MetricLine label={tr("Avg events/session")} value={insights.audience.engagement.avg_events_per_session.toFixed(2)} />
+          <MetricLine label={tr("Median duration")} value={`${insights.audience.engagement.median_session_duration_sec.toFixed(0)}s`} />
+          <MetricLine label={tr("Repeat visitors")} value={fmtPct(insights.business_overview.reach.repeat_visitor_rate_pct)} />
+          <MetricLine label={tr("Data coverage")} value={fmtPct(quality.overallCoverage)} />
         </div>
       </div>
     </Surface>
+  )
+}
+
+function intentTierLabel(value: string) {
+  return value === "converted" ? "Converted" : cleanLabel(value || "cold")
+}
+
+function intentTierClass(value: string) {
+  if (value === "converted") return "border-blue-100 bg-blue-50 text-blue-700"
+  if (value === "high") return "border-emerald-100 bg-emerald-50 text-emerald-700"
+  if (value === "medium") return "border-amber-100 bg-amber-50 text-amber-700"
+  if (value === "low") return "border-slate-200 bg-slate-50 text-slate-600"
+  return "border-slate-200 bg-white text-slate-500"
+}
+
+function intentTierColor(value: string) {
+  if (value === "converted") return "#1769E8"
+  if (value === "high") return "#22C55E"
+  if (value === "medium") return "#F59E0B"
+  if (value === "low") return "#6366F1"
+  return "#CBD5E1"
+}
+
+function PurchaseIntentCard({ insights }: { insights: BehaviorInsights }) {
+  const { tr } = useI18n()
+  const intent = insights.ml.purchase_intent
+  const score = Math.round(intent?.average_score || 0)
+  const data = [
+    { name: "Intent", value: score },
+    { name: "Gap", value: Math.max(100 - score, 0) },
+  ]
+  const distribution = intent?.distribution?.length
+    ? intent.distribution
+    : [
+        { tier: "high", sessions: 0, visitors: 0, open_sessions: 0, avg_score: 0, share_pct: 0 },
+        { tier: "medium", sessions: 0, visitors: 0, open_sessions: 0, avg_score: 0, share_pct: 0 },
+        { tier: "low", sessions: 0, visitors: 0, open_sessions: 0, avg_score: 0, share_pct: 0 },
+      ]
+  const opportunities = intent?.top_opportunities || []
+
+  return (
+    <Surface
+      title={tr("Purchase Intent Score")}
+      description={tr("Rules-based scoring for sessions that look close to buying before ML is trained.")}
+      action={<Badge variant="outline" className="bg-white">{intent?.status === "ready" ? tr("Live score") : tr("Collecting")}</Badge>}
+    >
+      <div className="grid gap-5 lg:grid-cols-[190px_1fr]">
+        <div>
+          <div className="relative h-40">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={data} dataKey="value" innerRadius={54} outerRadius={74} startAngle={210} endAngle={-30}>
+                  <Cell fill={score >= 70 ? "#22C55E" : score >= 45 ? "#F59E0B" : "#1769E8"} />
+                  <Cell fill="#E2E8F0" />
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="absolute inset-0 grid place-items-center text-center">
+              <div>
+                <div className="text-3xl font-semibold text-slate-950">{score}</div>
+                <div className="text-xs text-slate-500">{tr("avg score")}</div>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-center">
+            <div className="rounded-md border border-slate-100 bg-slate-50 p-2">
+              <div className="text-base font-semibold text-slate-950">{fmtInt(intent?.open_intent_sessions || 0)}</div>
+              <div className="text-[11px] text-slate-500">{tr("open intent")}</div>
+            </div>
+            <div className="rounded-md border border-slate-100 bg-slate-50 p-2">
+              <div className="text-base font-semibold text-slate-950">{fmtInt(intent?.visitors_scored || 0)}</div>
+              <div className="text-[11px] text-slate-500">{tr("visitors")}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="space-y-3">
+            {distribution.map((row) => (
+              <div key={row.tier}>
+                <div className="mb-1 flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Badge variant="outline" className={cn("shrink-0", intentTierClass(row.tier))}>{tr(intentTierLabel(row.tier))}</Badge>
+                    <span className="truncate text-xs text-slate-500">{fmtInt(row.open_sessions)} {tr("not yet purchased")}</span>
+                  </div>
+                  <span className="text-xs font-semibold tabular-nums text-slate-700">{fmtPct(row.share_pct)}</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${Math.min(row.share_pct, 100)}%`, backgroundColor: intentTierColor(row.tier) }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="border-t border-slate-100 pt-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="text-sm font-semibold text-slate-900">{tr("Best next opportunities")}</div>
+              <div className="text-xs text-slate-500">{fmtInt(intent?.sessions_scored || 0)} {tr("sessions scored")}</div>
+            </div>
+            <div className="space-y-3">
+              {opportunities.slice(0, 3).map((row) => (
+                <div key={row.session_id} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-md border border-slate-100 bg-white p-3">
+                  <div className="grid h-10 w-10 place-items-center rounded-md bg-blue-50 text-sm font-semibold text-blue-700">{Math.round(row.score)}</div>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-slate-900">{row.reason || tr("High-intent browsing")}</div>
+                    <div className="truncate text-xs text-slate-500">
+                      {compactUrl(row.last_page_url)} · {fmtInt(row.product_view_count)} {tr("product views")} · {fmtMoneyAmount(row.cart_value_tnd)}
+                    </div>
+                  </div>
+                  <div className="text-right text-[11px] text-slate-500">{timeAgo(row.session_end)}</div>
+                </div>
+              ))}
+              {!opportunities.length ? <p className="text-sm text-slate-500">{tr("No open high-intent sessions yet. The score will fill as the analysis refresh runs.")}</p> : null}
+            </div>
+          </div>
+        </div>
+      </div>
+    </Surface>
+  )
+}
+
+function recommendationTypeLabel(value: string) {
+  if (value === "abandoned_cart") return "Cart recovery"
+  if (value === "repeated_interest") return "Repeated interest"
+  if (value === "clicked_product") return "Clicked product"
+  return "Recent view"
+}
+
+function automationIntensityLabel(level: number) {
+  if (level <= 2) return "Very selective"
+  if (level <= 4) return "Selective"
+  if (level <= 6) return "Balanced"
+  if (level <= 8) return "Expanded reach"
+  return "Maximum reach"
+}
+
+function automationIntensityThreshold(level: number) {
+  const thresholds = [0, 88, 80, 72, 64, 56, 48, 40, 32, 22, 0]
+  return thresholds[Math.min(Math.max(level, 1), 10)]
+}
+
+function automationIntensityRisk(level: number) {
+  if (level <= 3) return { label: "Low", className: "border-emerald-100 bg-emerald-50 text-emerald-700" }
+  if (level <= 7) return { label: "Medium", className: "border-amber-100 bg-amber-50 text-amber-700" }
+  return { label: "High", className: "border-red-100 bg-red-50 text-red-700" }
+}
+
+function automationIntensityRules(level: number) {
+  return [
+    {
+      label: "Abandoned cart recovery",
+      included: level >= 1,
+      detail: level <= 2 ? "Only strong carts" : "All qualified abandoned carts",
+    },
+    {
+      label: "High purchase intent",
+      included: level >= 1,
+      detail: `Intent score >= ${automationIntensityThreshold(level)}`,
+    },
+    {
+      label: "Repeated product interest",
+      included: level >= 4,
+      detail: level >= 4 ? "Multiple views or return interest" : "Excluded at this level",
+    },
+    {
+      label: "General product browsing",
+      included: level >= 7,
+      detail: level >= 7 ? "Broad product signals included" : "Excluded at this level",
+    },
+    {
+      label: "Low-intent visitors",
+      included: level >= 10,
+      detail: level >= 10 ? "Included only if contact is allowed" : "Excluded for safety",
+    },
+  ]
+}
+
+function recommendationReachRatioForLevel(level: number) {
+  const ratios = [0, 0.08, 0.14, 0.22, 0.32, 0.45, 0.58, 0.7, 0.82, 0.92, 1]
+  return ratios[Math.min(Math.max(level, 1), 10)]
+}
+
+function RecommendationAutomationCard({ insights }: { insights: BehaviorInsights }) {
+  const { tr } = useI18n()
+  const recommendations = insights.recommendations
+  const siteId = insights.operations.site.site_id
+  const savedIntensity = recommendations.automation?.recommendation_intensity || 5
+  const [intensity, setIntensity] = useState(savedIntensity)
+  const [savedMessage, setSavedMessage] = useState("")
+  const [isSavingIntensity, setIsSavingIntensity] = useState(false)
+  const candidates = recommendations.top_candidates.slice(0, 5)
+  const emails = recommendations.email_outbox.slice(0, 3)
+  const threshold = automationIntensityThreshold(intensity)
+  const risk = automationIntensityRisk(intensity)
+  const estimateRecipientsForLevel = (level: number) => {
+    const levelThreshold = automationIntensityThreshold(level)
+    const qualified = recommendations.top_candidates.filter((item) => {
+      if (item.recommendation_type === "abandoned_cart") return level >= 1 && item.score >= Math.max(levelThreshold - 12, 0)
+      if (item.recommendation_type === "repeated_interest") return level >= 4 && item.score >= levelThreshold
+      if (item.recommendation_type === "clicked_product") return level >= 7 && item.score >= levelThreshold
+      return level >= 8 && item.score >= levelThreshold
+    })
+
+    const reachRatio = recommendations.top_candidates.length
+      ? qualified.length / Math.max(recommendations.top_candidates.length, 1)
+      : recommendationReachRatioForLevel(level)
+
+    return Math.min(
+      recommendations.emailable_customers,
+      Math.max(
+        recommendations.prepared_emails,
+        Math.round(recommendations.emailable_customers * reachRatio)
+      )
+    )
+  }
+  const levelEstimates = Array.from({ length: 10 }, (_, index) => {
+    const level = index + 1
+    return {
+      level,
+      recipients: estimateRecipientsForLevel(level),
+      label: tr(automationIntensityLabel(level)),
+    }
+  })
+  const estimatedRecipients = Math.min(
+    recommendations.emailable_customers,
+    estimateRecipientsForLevel(intensity)
+  )
+  const estimatedWeeklyEmails = Math.max(estimatedRecipients, recommendations.prepared_emails)
+  const rules = automationIntensityRules(intensity)
+
+  useEffect(() => {
+    setIntensity(savedIntensity)
+  }, [savedIntensity, siteId])
+
+  useEffect(() => {
+    if (recommendations.automation?.updated_at) return
+    const saved = window.localStorage.getItem(AUTOMATION_INTENSITY_STORAGE_KEY)
+    const parsed = Number(saved)
+    if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 10) {
+      setIntensity(parsed)
+    }
+  }, [recommendations.automation?.updated_at])
+
+  useEffect(() => {
+    window.localStorage.setItem(AUTOMATION_INTENSITY_STORAGE_KEY, String(intensity))
+    if (!siteId || intensity === savedIntensity) return
+
+    const controller = new AbortController()
+    setIsSavingIntensity(true)
+    setSavedMessage(tr("Saving automation intensity..."))
+
+    const timer = window.setTimeout(() => {
+      fetch("/api/automation/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          site_id: siteId,
+          recommendation_intensity: intensity,
+        }),
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          const result = await response.json().catch(() => ({}))
+          if (!response.ok) {
+            throw new Error(result.error || tr("Could not save automation intensity."))
+          }
+          setSavedMessage(tr("Saved. Future recommendation drafts will use this level."))
+        })
+        .catch((error) => {
+          if (error.name === "AbortError") return
+          setSavedMessage(error instanceof Error ? error.message : tr("Could not save automation intensity."))
+        })
+        .finally(() => setIsSavingIntensity(false))
+    }, 450)
+
+    return () => {
+      controller.abort()
+      window.clearTimeout(timer)
+    }
+  }, [intensity, savedIntensity, siteId])
+
+  return (
+    <Surface
+      title={tr("Recommendation Engine")}
+      description={tr("Journey-based product picks and prepared email drafts. Sending remains off until SMTP and consent rules are enabled.")}
+      action={
+        <Badge variant="outline" className={cn(
+          "bg-white",
+          recommendations.status === "ready" ? "border-emerald-100 text-emerald-700" : "border-amber-100 text-amber-700"
+        )}>
+          {recommendations.status === "ready" ? tr("Ready") : tr("Collecting")}
+        </Badge>
+      }
+    >
+      <div className="grid gap-3 md:grid-cols-4">
+        <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
+          <div className="text-xs font-medium text-slate-500">{tr("Candidates")}</div>
+          <div className="mt-1 text-xl font-semibold text-slate-950">{fmtInt(recommendations.total_candidates)}</div>
+        </div>
+        <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
+          <div className="text-xs font-medium text-slate-500">{tr("Visitors")}</div>
+          <div className="mt-1 text-xl font-semibold text-slate-950">{fmtInt(recommendations.visitors)}</div>
+        </div>
+        <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
+          <div className="text-xs font-medium text-slate-500">{tr("Can email")}</div>
+          <div className="mt-1 text-xl font-semibold text-slate-950">{fmtInt(recommendations.emailable_customers)}</div>
+        </div>
+        <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
+          <div className="text-xs font-medium text-slate-500">{tr("Avg score")}</div>
+          <div className="mt-1 text-xl font-semibold text-slate-950">{recommendations.avg_score.toFixed(1)}</div>
+        </div>
+      </div>
+
+      <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-slate-950">{tr("Automation Intensity")}</div>
+                <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
+                  {tr("Choose how selective the recommendation algorithm should be. Higher levels reach more customers, lower levels focus only on the strongest purchase-intent signals.")}
+                </p>
+                {savedMessage ? <p className="mt-2 text-xs font-medium text-slate-500">{savedMessage}</p> : null}
+              </div>
+              <div className="flex items-center gap-2">
+                {isSavingIntensity ? (
+                  <Badge variant="outline" className="border-slate-200 bg-white text-slate-500">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    {tr("Saving")}
+                  </Badge>
+                ) : null}
+                <Badge variant="outline" className="border-blue-100 bg-blue-50 text-blue-700">
+                  {tr(automationIntensityLabel(intensity))}
+                </Badge>
+                <Badge variant="outline" className={risk.className}>
+                  {tr("Risk")} {tr(risk.label)}
+                </Badge>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-[auto_1fr_auto] sm:items-center">
+              <div className="text-2xl font-semibold tabular-nums text-slate-950">{intensity}/10</div>
+              <Slider
+                value={[intensity]}
+                min={1}
+                max={10}
+                step={1}
+                onValueChange={(value) => setIntensity(value[0] || 1)}
+                aria-label="Automation intensity"
+              />
+              <div className="text-right text-xs text-slate-500">
+                {tr("Threshold")}
+                <div className="text-sm font-semibold text-slate-900">{threshold ? `${threshold}+` : tr("Any signal")}</div>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 md:grid-cols-3">
+              <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
+                <div className="text-xs font-medium text-slate-500">{tr("Estimated recipients")}</div>
+                <div className="mt-1 text-xl font-semibold text-slate-950">{fmtInt(estimatedRecipients)}</div>
+              </div>
+              <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
+                <div className="text-xs font-medium text-slate-500">{tr("Estimated emails/week")}</div>
+                <div className="mt-1 text-xl font-semibold text-slate-950">{fmtInt(estimatedWeeklyEmails)}</div>
+              </div>
+              <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
+                <div className="text-xs font-medium text-slate-500">{tr("Sending mode")}</div>
+                <div className="mt-1 text-xl font-semibold text-slate-950">{tr("Draft only")}</div>
+              </div>
+            </div>
+
+            <div className="mt-5">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div className="text-xs font-semibold text-slate-700">{tr("Recipients by level")}</div>
+                <div className="text-[11px] text-slate-500">{tr("Estimated users who would receive an email")}</div>
+              </div>
+              <div className="grid grid-cols-5 gap-2 lg:grid-cols-10">
+                {levelEstimates.map((item) => (
+                  <button
+                    key={item.level}
+                    type="button"
+                    onClick={() => setIntensity(item.level)}
+                    className={cn(
+                      "rounded-md border px-2 py-2 text-center transition",
+                      item.level === intensity
+                        ? "border-blue-200 bg-blue-50 text-blue-700 shadow-sm"
+                        : "border-slate-100 bg-slate-50 text-slate-600 hover:border-slate-200 hover:bg-white"
+                    )}
+                    title={`${item.label}: ${fmtInt(item.recipients)} ${tr("Recipients").toLowerCase()}`}
+                  >
+                    <div className="text-[11px] font-semibold">L{item.level}</div>
+                    <div className="mt-1 text-sm font-semibold tabular-nums">{fmtInt(item.recipients)}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-md border border-blue-100 bg-blue-50 p-3">
+            <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-blue-800">{tr("Included audiences")}</div>
+            <div className="space-y-2">
+              {rules.map((rule) => (
+                <div key={rule.label} className="flex items-start gap-2 rounded-md bg-white/70 p-2">
+                  <div className={cn("mt-0.5 h-2.5 w-2.5 rounded-full", rule.included ? "bg-emerald-500" : "bg-slate-300")} />
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-slate-900">{tr(rule.label)}</div>
+                    <div className="text-[11px] leading-4 text-slate-500">{rule.detail.startsWith("Intent score") ? rule.detail : tr(rule.detail)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_310px]">
+        <div>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="text-sm font-semibold text-slate-900">{tr("Top product recommendations")}</div>
+            <span className="text-xs text-slate-500">{fmtInt(recommendations.abandoned_cart_candidates)} {tr("cart recovery")}</span>
+          </div>
+          <div className="space-y-3">
+            {candidates.map((item) => {
+              const content = (
+                <>
+                  <div className="grid h-10 w-10 place-items-center rounded-md bg-blue-50 text-sm font-semibold text-blue-700">
+                    {Math.round(item.score)}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate text-sm font-medium text-slate-950">{item.product_name || item.product_id}</span>
+                      {item.product_url ? <ExternalLink className="h-3.5 w-3.5 shrink-0 text-slate-400" /> : null}
+                    </div>
+                    <div className="truncate text-xs text-slate-500">
+                      {tr(recommendationTypeLabel(item.recommendation_type))} · {item.reason}
+                    </div>
+                  </div>
+                  <div className="text-right text-xs text-slate-500">
+                    <div>{fmtInt(item.views)} {tr("views")}</div>
+                    <div>{fmtInt(item.add_to_cart_events)} {tr("carts")}</div>
+                  </div>
+                </>
+              )
+
+              return item.product_url ? (
+                <a
+                  key={item.recommendation_id}
+                  href={item.product_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-md border border-slate-100 bg-white p-3 transition hover:bg-slate-50"
+                >
+                  {content}
+                </a>
+              ) : (
+                <div key={item.recommendation_id} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-md border border-slate-100 bg-white p-3">
+                  {content}
+                </div>
+              )
+            })}
+            {!candidates.length ? <p className="text-sm text-slate-500">{tr("No recommendation candidates yet. Refresh the insights after more product journeys arrive.")}</p> : null}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-blue-950">{tr("Prepared emails")}</div>
+              <div className="text-xs text-blue-800">{fmtInt(recommendations.prepared_emails)} {tr("drafts in outbox")}</div>
+            </div>
+            <Send className="h-5 w-5 text-blue-700" />
+          </div>
+          <div className="mt-4 space-y-3">
+            {emails.map((email) => (
+              <div key={email.email_id} className="rounded-md border border-blue-100 bg-white/80 p-3">
+                <div className="truncate text-sm font-medium text-slate-950">{email.to_email}</div>
+                <div className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{email.preview_text}</div>
+                <div className="mt-2 text-[11px] text-slate-400">{fmtInt(email.product_count)} {tr("products")} · {timeAgo(email.updated_at)}</div>
+              </div>
+            ))}
+            {!emails.length ? <p className="text-sm leading-6 text-blue-900">{tr("No email drafts yet. We only prepare drafts when a customer email exists in the tracked journey.")}</p> : null}
+          </div>
+          <Button asChild variant="outline" className="mt-4 w-full border-blue-200 bg-white text-blue-700 hover:bg-blue-50">
+            <Link href={`/emails?site_id=${encodeURIComponent(siteId)}`}>
+              {tr("Review Outbox")}
+              <ExternalLink className="h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
+      </div>
+    </Surface>
+  )
+}
+
+function SmartActionMetric({
+  label,
+  value,
+  helper,
+  icon: Icon,
+}: {
+  label: string
+  value: string
+  helper: string
+  icon: typeof Activity
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs font-medium text-slate-500">{label}</span>
+        <div className="grid h-8 w-8 place-items-center rounded-md bg-blue-50 text-blue-700">
+          <Icon className="h-4 w-4" />
+        </div>
+      </div>
+      <div className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">{value}</div>
+      <div className="mt-1 text-xs leading-5 text-slate-500">{helper}</div>
+    </div>
+  )
+}
+
+function SmartActionFeatureCard({
+  title,
+  description,
+  href,
+  icon: Icon,
+  status,
+  metrics,
+}: {
+  title: string
+  description: string
+  href: string
+  icon: typeof Activity
+  status: string
+  metrics: Array<{ label: string; value: string }>
+}) {
+  return (
+    <Link
+      href={href}
+      className="group flex h-full flex-col rounded-lg border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition hover:border-blue-200 hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)]"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="grid h-10 w-10 place-items-center rounded-md bg-blue-50 text-blue-700">
+          <Icon className="h-5 w-5" />
+        </div>
+        <Badge variant="outline" className="border-emerald-100 bg-emerald-50 text-emerald-700">
+          {status}
+        </Badge>
+      </div>
+      <div className="mt-4">
+        <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+          {title}
+          <ExternalLink className="h-3.5 w-3.5 text-slate-400 transition group-hover:text-blue-600" />
+        </div>
+        <p className="mt-2 text-xs leading-5 text-slate-500">{description}</p>
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        {metrics.map((metric) => (
+          <div key={metric.label} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+            <div className="text-[11px] font-medium text-slate-500">{metric.label}</div>
+            <div className="mt-1 text-sm font-semibold text-slate-950">{metric.value}</div>
+          </div>
+        ))}
+      </div>
+    </Link>
+  )
+}
+
+function SmartActionsPreviewCard({ insights }: { insights: BehaviorInsights }) {
+  const { tr } = useI18n()
+  const siteId = insights.operations.site.site_id || "tdiscount"
+  const intent = insights.ml.purchase_intent
+  const recommendations = insights.recommendations
+  const readyActions = (intent?.open_intent_sessions || 0) + recommendations.prepared_emails
+
+  return (
+    <Surface
+      title={tr("Smart Actions")}
+      description={tr("Your scoring, recommendations, and prepared outreach now live in one workspace.")}
+      action={
+        <Button asChild variant="outline" className="border-blue-200 bg-white text-blue-700 hover:bg-blue-50">
+          <Link href={appHrefForSite(siteId, "smart-actions")}>
+            {tr("Open Hub")}
+            <ExternalLink className="h-4 w-4" />
+          </Link>
+        </Button>
+      }
+    >
+      <div className="grid gap-3 md:grid-cols-4">
+        <MetricLine label={tr("Ready actions")} value={fmtInt(readyActions)} />
+        <MetricLine label={tr("Avg intent score")} value={(intent?.average_score || 0).toFixed(1)} />
+        <MetricLine label={tr("Recommendation candidates")} value={fmtInt(recommendations.total_candidates)} />
+        <MetricLine label={tr("Email drafts")} value={fmtInt(recommendations.prepared_emails)} />
+      </div>
+    </Surface>
+  )
+}
+
+function SmartActionGuardrailsCard({ insights }: { insights: BehaviorInsights }) {
+  const { tr } = useI18n()
+  const siteId = insights.operations.site.site_id || "tdiscount"
+  const rows = [
+    {
+      icon: Send,
+      label: "Sending mode",
+      value: "Draft only",
+      detail: "Emails are prepared in the outbox but not sent automatically.",
+      status: "Safe",
+    },
+    {
+      icon: ShieldCheck,
+      label: "Consent rules",
+      value: "Required before live send",
+      detail: "Opt-in, unsubscribe, and suppression logic should be connected before real outreach.",
+      status: "Next",
+    },
+    {
+      icon: Bell,
+      label: "Action limits",
+      value: "Planned",
+      detail: "Cooldowns, max messages per customer, and quiet hours will prevent spammy behaviour.",
+      status: "Planned",
+    },
+    {
+      icon: Settings,
+      label: "Provider setup",
+      value: "Not connected",
+      detail: "SMTP, WhatsApp, or another provider can be attached once the action rules are stable.",
+      status: "Pending",
+    },
+  ]
+
+  return (
+    <Surface
+      title={tr("Configuration And Guardrails")}
+      description={tr("The action layer is intentionally conservative: it can prepare work today, while live sending stays protected behind business rules.")}
+      action={
+        <Button asChild variant="outline" className="border-slate-200 bg-white text-slate-700">
+          <Link href={`/emails?site_id=${encodeURIComponent(siteId)}`}>
+            {tr("Review Outbox")}
+            <ExternalLink className="h-4 w-4" />
+          </Link>
+        </Button>
+      }
+    >
+      <div className="grid gap-3 md:grid-cols-2">
+        {rows.map((row) => (
+          <div key={row.label} className="rounded-md border border-slate-100 bg-slate-50 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 gap-3">
+                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-blue-700 ring-1 ring-slate-200">
+                  <row.icon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-slate-950">{tr(row.label)}</div>
+                  <div className="mt-1 text-xs font-medium text-slate-600">{tr(row.value)}</div>
+                  <div className="mt-1 text-xs leading-5 text-slate-500">{tr(row.detail)}</div>
+                </div>
+              </div>
+              <Badge variant="outline" className="shrink-0 border-slate-200 bg-white text-slate-600">
+                {tr(row.status)}
+              </Badge>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-900">
+        Next real configuration step for {siteId}: store action rules in the backend, then let each automation move from draft mode to manual approval and finally to live sending.
+      </div>
+    </Surface>
+  )
+}
+
+function SmartActionsDashboard({ insights }: { insights: BehaviorInsights }) {
+  const { tr } = useI18n()
+  const siteId = insights.operations.site.site_id || "tdiscount"
+  const intent = insights.ml.purchase_intent
+  const recommendations = insights.recommendations
+  const readyActions = (intent?.open_intent_sessions || 0) + recommendations.prepared_emails
+  const latestDraft = recommendations.email_outbox[0]
+  const latestCandidate = recommendations.top_candidates[0]
+  const intentStatus = intent?.status === "ready" ? tr("Ready") : tr("Collecting")
+  const recommendationStatus = recommendations.status === "ready" ? tr("Ready") : tr("Collecting")
+
+  return (
+    <>
+      <Surface
+        title={tr("What Smart Actions Does")}
+        description={tr("Smart Actions turns tracked behaviour into practical follow-up opportunities for the business.")}
+      >
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="text-sm leading-6 text-slate-600">
+            {tr("It connects three jobs that should work together: scoring visitors by purchase intent, selecting products that match their journey, and preparing outreach drafts for customers who can be contacted. The goal is to help the store recover abandoned carts, follow up on repeated product interest, and focus the team on visitors most likely to buy.")}
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+            {[
+              { label: tr("Score"), value: tr("Find high-intent visitors"), icon: Gauge },
+              { label: tr("Recommend"), value: tr("Pick relevant products"), icon: PackageSearch },
+              { label: tr("Act"), value: tr("Prepare email actions"), icon: Send },
+              { label: tr("Measure"), value: tr("Track results safely"), icon: LineChartIcon },
+            ].map((item) => (
+              <div key={item.label} className="flex items-center gap-3 rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+                <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white text-blue-700 ring-1 ring-slate-200">
+                  <item.icon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-slate-950">{item.label}</div>
+                  <div className="truncate text-xs text-slate-500">{item.value}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="mt-4 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+          {tr("Current mode is draft-only: the system prepares recommendations and email drafts, but real sending stays off until consent rules, unsubscribe handling, and a sending provider are connected.")}
+        </div>
+      </Surface>
+
+      <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
+        <SmartActionMetric
+          label={tr("Ready actions")}
+          value={fmtInt(readyActions)}
+          helper={tr("Open intent sessions plus prepared recommendation drafts")}
+          icon={Sparkles}
+        />
+        <SmartActionMetric
+          label={tr("Average intent score")}
+          value={(intent?.average_score || 0).toFixed(1)}
+          helper={`${fmtInt(intent?.sessions_scored || 0)} ${tr("sessions scored")}`}
+          icon={Gauge}
+        />
+        <SmartActionMetric
+          label={tr("Recommendation candidates")}
+          value={fmtInt(recommendations.total_candidates)}
+          helper={`${fmtInt(recommendations.visitors)} ${tr("visitors with product signals")}`}
+          icon={PackageSearch}
+        />
+        <SmartActionMetric
+          label={tr("Email drafts")}
+          value={fmtInt(recommendations.prepared_emails)}
+          helper={`${fmtInt(recommendations.emailable_customers)} ${tr("customers can receive outreach")}`}
+          icon={Send}
+        />
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-2">
+        <SmartActionFeatureCard
+          title={tr("Purchase Intent Scoring")}
+          description={tr("Rank sessions and visitors by buying probability, then inspect the signals behind every score.")}
+          href={appHrefForSite(siteId, "smart-intent")}
+          icon={Gauge}
+          status={intentStatus}
+          metrics={[
+            { label: tr("High intent"), value: fmtInt(intent?.high_intent_sessions || 0) },
+            { label: tr("Open opportunities"), value: fmtInt(intent?.open_intent_sessions || 0) },
+            { label: tr("Converted"), value: fmtInt(intent?.converted_sessions || 0) },
+            { label: tr("Visitors scored"), value: fmtInt(intent?.visitors_scored || 0) },
+          ]}
+        />
+        <SmartActionFeatureCard
+          title={tr("Product Recommendations")}
+          description={tr("Prepare product picks and recovery emails from cart, repeat-interest, and browsing journeys.")}
+          href={appHrefForSite(siteId, "smart-recommendations")}
+          icon={Send}
+          status={recommendationStatus}
+          metrics={[
+            { label: tr("Candidates"), value: fmtInt(recommendations.total_candidates) },
+            { label: tr("Cart recovery"), value: fmtInt(recommendations.abandoned_cart_candidates) },
+            { label: tr("Email drafts"), value: fmtInt(recommendations.prepared_emails) },
+            { label: tr("Avg score"), value: recommendations.avg_score.toFixed(1) },
+          ]}
+        />
+      </section>
+
+      <SmartActionGuardrailsCard insights={insights} />
+
+      <Surface title={tr("Action Queue")} description={tr("The most important next actions across scoring and recommendations.")}>
+        <div className="grid gap-5 xl:grid-cols-2">
+          <div>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="text-sm font-semibold text-slate-900">{tr("Highest intent sessions")}</div>
+              <Button asChild size="sm" variant="outline" className="border-slate-200 bg-white text-slate-700">
+                <Link href={appHrefForSite(siteId, "smart-intent")}>{tr("Inspect")}</Link>
+              </Button>
+            </div>
+            <div className="space-y-2">
+              {(intent?.top_opportunities || []).slice(0, 4).map((item) => (
+                <div key={item.session_id} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-md border border-slate-100 bg-slate-50 p-3">
+                  <div className="grid h-9 w-9 place-items-center rounded-md bg-blue-50 text-sm font-semibold text-blue-700">
+                    {Math.round(item.score)}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-slate-950">{item.customer_email || item.visitor_id || tr("Anonymous visitor")}</div>
+                    <div className="truncate text-xs text-slate-500">{item.reason}</div>
+                  </div>
+                  <div className="text-right text-xs text-slate-500">{cleanLabel(item.tier)}</div>
+                </div>
+              ))}
+              {!intent?.top_opportunities.length ? <p className="text-sm text-slate-500">{tr("No open purchase-intent opportunities yet.")}</p> : null}
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="text-sm font-semibold text-slate-900">{tr("Recommendation outreach")}</div>
+              <Button asChild size="sm" variant="outline" className="border-slate-200 bg-white text-slate-700">
+                <Link href={`/emails?site_id=${encodeURIComponent(siteId)}`}>{tr("Outbox")}</Link>
+              </Button>
+            </div>
+            <div className="space-y-2">
+              {recommendations.email_outbox.slice(0, 4).map((email) => (
+                <div key={email.email_id} className="rounded-md border border-slate-100 bg-slate-50 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-slate-950">{email.to_email}</div>
+                      <div className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{email.preview_text}</div>
+                    </div>
+                    <Badge variant="outline" className="border-blue-100 bg-white text-blue-700">
+                      {fmtInt(email.product_count)}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+              {!recommendations.email_outbox.length ? <p className="text-sm text-slate-500">{tr("No recommendation drafts yet.")}</p> : null}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <MetricLine label={tr("Latest recommendation")} value={latestCandidate ? timeAgo(latestCandidate.last_signal_at) : tr("No data")} />
+          <MetricLine label={tr("Latest draft")} value={latestDraft ? timeAgo(latestDraft.updated_at) : tr("No data")} />
+          <MetricLine label={tr("Sending mode")} value={tr("Draft only")} />
+        </div>
+      </Surface>
+    </>
   )
 }
 
@@ -1513,6 +2519,7 @@ function MetricLine({ label, value }: { label: string; value: string }) {
 }
 
 function TrendsCard({ insights }: { insights: BehaviorInsights }) {
+  const { tr } = useI18n()
   const trendData = insights.daily_trends.map((row) => ({
     date: row.date.slice(5),
     sessions: row.sessions,
@@ -1520,7 +2527,7 @@ function TrendsCard({ insights }: { insights: BehaviorInsights }) {
     purchases: row.purchases,
   }))
   return (
-    <Surface title="Daily Behaviour Trend" description="Sessions, carts, and purchases over the current analysis window." className="xl:col-span-2">
+    <Surface title={tr("Daily Behaviour Trend")} description={tr("Sessions, carts, and purchases over the current analysis window.")} className="xl:col-span-2">
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={trendData} margin={{ left: 4, right: 16, top: 8, bottom: 0 }}>
@@ -1539,15 +2546,19 @@ function TrendsCard({ insights }: { insights: BehaviorInsights }) {
 }
 
 function EventMixCard({ insights }: { insights: BehaviorInsights }) {
-  const rows = buildEventMix(insights).slice(0, 8)
+  const { tr } = useI18n()
+  const rows = buildEventMix(insights).slice(0, 8).map((row) => ({
+    ...row,
+    translatedName: tr(row.name),
+  }))
   return (
-    <Surface title="Event Mix" description="Most frequent event names from Layer 2 aggregation.">
+    <Surface title={tr("Event Mix")} description={tr("Most frequent event names from the analysis engine.")}>
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={rows} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
             <CartesianGrid stroke="#E2E8F0" horizontal={false} />
             <XAxis type="number" tickLine={false} axisLine={false} tick={{ fill: "#64748B", fontSize: 12 }} />
-            <YAxis dataKey="name" type="category" tickLine={false} axisLine={false} width={120} tick={{ fill: "#64748B", fontSize: 12 }} />
+            <YAxis dataKey="translatedName" type="category" tickLine={false} axisLine={false} width={120} tick={{ fill: "#64748B", fontSize: 12 }} />
             <Tooltip />
             <Bar dataKey="count" radius={[0, 6, 6, 0]} fill="#1769E8" />
           </BarChart>
@@ -1559,7 +2570,7 @@ function EventMixCard({ insights }: { insights: BehaviorInsights }) {
 
 function ModelReadinessCard({ insights }: { insights: BehaviorInsights }) {
   const rows = [
-    { label: "Layer 2 features", value: insights.dataset.rows ? "Ready" : "Waiting", status: insights.dataset.rows ? "healthy" : "neutral" },
+    { label: "Behaviour features", value: insights.dataset.rows ? "Ready" : "Waiting", status: insights.dataset.rows ? "healthy" : "neutral" },
     { label: "Session clustering", value: insights.ml.session_clustering?.segments?.length ? "Ready" : "Collecting", status: insights.ml.session_clustering?.segments?.length ? "healthy" : "processing" },
     { label: "Purchase propensity", value: insights.ml.purchase_propensity?.status === "ok" ? "Ready" : "Planned", status: insights.ml.purchase_propensity?.status === "ok" ? "healthy" : "warning" },
     { label: "AI recommendations", value: insights.saas_product_notes.length ? "Available" : "Rules only", status: insights.saas_product_notes.length ? "healthy" : "processing" },
@@ -1584,7 +2595,7 @@ function ModelReadinessCard({ insights }: { insights: BehaviorInsights }) {
 function PipelineHealthCard({ insights }: { insights: BehaviorInsights }) {
   const runs = insights.operations.analysis_runs.slice(0, 5)
   return (
-    <Surface title="Pipeline Health" description="Latest analysis jobs written by the Layer 2 workflow.">
+    <Surface title="Pipeline Health" description="Latest analysis jobs written by the insights workflow.">
       <div className="space-y-3">
         {runs.map((run) => (
           <div key={run.run_id} className="flex items-center justify-between gap-4 rounded-md border border-slate-100 bg-slate-50/70 p-3">
@@ -1722,22 +2733,51 @@ function HealthRow({ icon: Icon, label, value }: { icon: typeof Activity; label:
 }
 
 function CommandBar() {
+  const { tr } = useI18n()
+  const [question, setQuestion] = useState("")
+  const prompts = ["Why did conversion drop?", "Top products this week", "Compare mobile vs desktop"]
+
+  function askCopilot(value: string) {
+    const clean = value.trim()
+    if (!clean) return
+    window.dispatchEvent(new CustomEvent("behaviourai:copilot:ask", { detail: { question: clean } }))
+    setQuestion("")
+  }
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    askCopilot(question)
+  }
+
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-2 shadow-[0_8px_24px_rgba(15,23,42,0.08)]">
-      <div className="flex items-center gap-3 rounded-md bg-slate-50 px-3 py-2">
+      <form onSubmit={submit} className="flex items-center gap-3 rounded-md bg-slate-50 px-3 py-2">
         <Sparkles className="h-4 w-4 text-blue-600" />
         <input
+          value={question}
+          onChange={(event) => setQuestion(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault()
+              askCopilot(question)
+            }
+          }}
           className="min-w-0 flex-1 bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
-          placeholder="Ask AI about your data..."
+          placeholder={tr("Ask AI about your data...")}
         />
-        <Button size="icon-sm" className="bg-blue-600 hover:bg-blue-700">
+        <Button type="submit" size="icon-sm" disabled={!question.trim()} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50">
           <Send className="h-4 w-4" />
         </Button>
-      </div>
+      </form>
       <div className="mt-2 flex flex-wrap gap-2 px-1">
-        {["Why did conversion drop?", "Top products this week", "Compare mobile vs desktop"].map((prompt) => (
-          <button key={prompt} className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-500 hover:bg-slate-50">
-            {prompt}
+        {prompts.map((prompt) => (
+          <button
+            key={prompt}
+            type="button"
+            onClick={() => askCopilot(prompt)}
+            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-500 hover:bg-slate-50"
+          >
+            {tr(prompt)}
           </button>
         ))}
       </div>
@@ -1930,7 +2970,7 @@ function ReportExportCard({ insights }: { insights: BehaviorInsights }) {
           </Link>
         </Button>
         <Button asChild variant="outline" className="border-slate-200 bg-white text-slate-700">
-          <Link href="/emails">
+          <Link href={`/emails?site_id=${encodeURIComponent(siteId)}`}>
             <Send className="h-4 w-4" />
             Email outbox
           </Link>
@@ -1969,43 +3009,487 @@ function ComingReportCard() {
   )
 }
 
-type MetricCardData = {
+type CopilotUiMessage = {
+  role: "user" | "assistant"
+  content: string
+}
+
+type CopilotSuggestedAction = {
   label: string
-  value: string
-  helper: string
-  icon: typeof Activity
-  tone: "blue" | "teal" | "indigo" | "amber"
+  href: string
+  reason: string
+}
+
+type CopilotMeta = {
+  mode: string
+  model: string
+  data_as_of: string
+}
+
+type StoredCopilotState = {
+  messages: CopilotUiMessage[]
+  actions: CopilotSuggestedAction[]
+  meta: CopilotMeta | null
+}
+
+const defaultCopilotMessages: CopilotUiMessage[] = [
+  {
+    role: "assistant",
+    content: "I can explain your store metrics, Smart Actions, recommendations, and where to go next. I only use the current site summary and platform knowledge.",
+  },
+]
+
+function safeParseCopilotState(value: string | null): StoredCopilotState | null {
+  if (!value) return null
+
+  try {
+    const parsed = JSON.parse(value) as Partial<StoredCopilotState>
+    const messages = Array.isArray(parsed.messages)
+      ? parsed.messages.filter(
+          (message): message is CopilotUiMessage =>
+            Boolean(message) &&
+            (message.role === "user" || message.role === "assistant") &&
+            typeof message.content === "string" &&
+            message.content.trim().length > 0
+        )
+      : []
+    const actions = Array.isArray(parsed.actions)
+      ? parsed.actions.filter(
+          (action): action is CopilotSuggestedAction =>
+            Boolean(action) &&
+            typeof action.label === "string" &&
+            typeof action.href === "string" &&
+            typeof action.reason === "string"
+        )
+      : []
+    const meta =
+      parsed.meta && typeof parsed.meta === "object"
+        ? {
+            mode: String(parsed.meta.mode || "mock"),
+            model: String(parsed.meta.model || "rules-mock"),
+            data_as_of: String(parsed.meta.data_as_of || ""),
+          }
+        : null
+
+    return {
+      messages: messages.length ? messages : defaultCopilotMessages,
+      actions,
+      meta,
+    }
+  } catch {
+    return null
+  }
+}
+
+function renderMarkdownInline(text: string, keyPrefix: string): ReactNode[] {
+  const nodes: ReactNode[] = []
+  const pattern = /(\[[^\]]+]\([^)]+\)|`[^`]+`|\*\*[^*]+?\*\*|\*[^*]+?\*)/g
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = pattern.exec(text))) {
+    if (match.index > lastIndex) {
+      nodes.push(text.slice(lastIndex, match.index))
+    }
+
+    const token = match[0]
+    const key = `${keyPrefix}-${match.index}`
+
+    if (token.startsWith("**") && token.endsWith("**")) {
+      nodes.push(
+        <strong key={key} className="font-semibold text-inherit">
+          {token.slice(2, -2)}
+        </strong>
+      )
+    } else if (token.startsWith("`") && token.endsWith("`")) {
+      nodes.push(
+        <code key={key} className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[0.85em] text-slate-800">
+          {token.slice(1, -1)}
+        </code>
+      )
+    } else if (token.startsWith("[") && token.includes("](") && token.endsWith(")")) {
+      const splitIndex = token.indexOf("](")
+      const label = token.slice(1, splitIndex)
+      const href = token.slice(splitIndex + 2, -1)
+      const safeHref = href.startsWith("/") || href.startsWith("http://") || href.startsWith("https://") ? href : "#"
+      nodes.push(
+        <a
+          key={key}
+          href={safeHref}
+          target={safeHref.startsWith("http") ? "_blank" : undefined}
+          rel={safeHref.startsWith("http") ? "noreferrer" : undefined}
+          className="font-medium text-blue-700 underline decoration-blue-200 underline-offset-2 hover:text-blue-800"
+        >
+          {label}
+        </a>
+      )
+    } else if (token.startsWith("*") && token.endsWith("*")) {
+      nodes.push(
+        <em key={key} className="italic">
+          {token.slice(1, -1)}
+        </em>
+      )
+    }
+
+    lastIndex = match.index + token.length
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex))
+  }
+
+  return nodes
+}
+
+function MarkdownMessage({ content }: { content: string }) {
+  const lines = content.split(/\r?\n/)
+  const blocks: ReactNode[] = []
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].trim()
+    if (!line) continue
+
+    const heading = line.match(/^(#{1,4})\s+(.+)$/)
+    if (heading) {
+      blocks.push(
+        <div key={`heading-${index}`} className="mt-2 first:mt-0 text-[13px] font-semibold text-slate-950">
+          {renderMarkdownInline(heading[2], `heading-${index}`)}
+        </div>
+      )
+      continue
+    }
+
+    if (/^[-*]\s+/.test(line)) {
+      const items: string[] = []
+      while (index < lines.length && /^[-*]\s+/.test(lines[index].trim())) {
+        items.push(lines[index].trim().replace(/^[-*]\s+/, ""))
+        index += 1
+      }
+      index -= 1
+      blocks.push(
+        <ul key={`list-${index}`} className="my-2 space-y-1 pl-4">
+          {items.map((item, itemIndex) => (
+            <li key={`${item}-${itemIndex}`} className="list-disc marker:text-slate-400">
+              {renderMarkdownInline(item, `list-${index}-${itemIndex}`)}
+            </li>
+          ))}
+        </ul>
+      )
+      continue
+    }
+
+    if (/^\d+\.\s+/.test(line)) {
+      const items: string[] = []
+      while (index < lines.length && /^\d+\.\s+/.test(lines[index].trim())) {
+        items.push(lines[index].trim().replace(/^\d+\.\s+/, ""))
+        index += 1
+      }
+      index -= 1
+      blocks.push(
+        <ol key={`ordered-${index}`} className="my-2 space-y-1 pl-4">
+          {items.map((item, itemIndex) => (
+            <li key={`${item}-${itemIndex}`} className="list-decimal marker:text-slate-400">
+              {renderMarkdownInline(item, `ordered-${index}-${itemIndex}`)}
+            </li>
+          ))}
+        </ol>
+      )
+      continue
+    }
+
+    blocks.push(
+      <p key={`paragraph-${index}`} className="my-2 first:mt-0 last:mb-0">
+        {renderMarkdownInline(line, `paragraph-${index}`)}
+      </p>
+    )
+  }
+
+  return <div className="space-y-1">{blocks}</div>
+}
+
+function CopilotDock({ siteId }: { siteId: string }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [input, setInput] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const [messages, setMessages] = useState<CopilotUiMessage[]>(defaultCopilotMessages)
+  const [actions, setActions] = useState<CopilotSuggestedAction[]>([])
+  const [showActions, setShowActions] = useState(false)
+  const [meta, setMeta] = useState<CopilotMeta | null>(null)
+  const [loadedStorageKey, setLoadedStorageKey] = useState("")
+  const messagesEndRef = useRef<HTMLDivElement | null>(null)
+  const askRef = useRef<(question: string) => void>(() => {})
+
+  const prompts = [
+    "How is my business doing?",
+    "What should I do next?",
+    "Explain Smart Actions.",
+    "Why are users abandoning carts?",
+  ]
+
+  const storageKey = useMemo(() => `behaviourai:copilot:${siteId || "default"}`, [siteId])
+  const hasUserMessages = messages.some((message) => message.role === "user")
+  const showStarterPrompts = !hasUserMessages && !isLoading
+
+  useEffect(() => {
+    setLoadedStorageKey("")
+    setIsLoading(false)
+    setShowActions(false)
+
+    if (typeof window === "undefined") {
+      setMessages(defaultCopilotMessages)
+      setActions([])
+      setMeta(null)
+      setLoadedStorageKey(storageKey)
+      return
+    }
+
+    const stored = safeParseCopilotState(window.localStorage.getItem(storageKey))
+    setMessages(stored?.messages || defaultCopilotMessages)
+    setActions(stored?.actions || [])
+    setMeta(stored?.meta || null)
+    setLoadedStorageKey(storageKey)
+  }, [storageKey])
+
+  useEffect(() => {
+    if (typeof window === "undefined" || loadedStorageKey !== storageKey) return
+    window.localStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        messages,
+        actions,
+        meta,
+      } satisfies StoredCopilotState)
+    )
+  }, [actions, loadedStorageKey, messages, meta, storageKey])
+
+  useEffect(() => {
+    if (!isOpen) return
+    messagesEndRef.current?.scrollIntoView({ block: "end" })
+  }, [isOpen, isLoading, messages])
+
+  async function ask(question: string) {
+    const clean = question.trim()
+    if (!clean || isLoading) return
+
+    const nextMessages: CopilotUiMessage[] = [...messages, { role: "user", content: clean }]
+    setMessages(nextMessages)
+    setInput("")
+    setIsLoading(true)
+
+    try {
+      const response = await fetch("/api/copilot/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          site_id: siteId,
+          question: clean,
+          messages,
+        }),
+      })
+      const result = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(result.error || "Copilot could not answer right now.")
+      }
+
+      setMessages([...nextMessages, { role: "assistant", content: String(result.answer || "") }])
+      setActions(Array.isArray(result.suggested_actions) ? result.suggested_actions : [])
+      setShowActions(false)
+      setMeta({
+        mode: String(result.mode || "mock"),
+        model: String(result.model || "rules-mock"),
+        data_as_of: String(result.data_as_of || ""),
+      })
+    } catch (error) {
+      setMessages([
+        ...nextMessages,
+        {
+          role: "assistant",
+          content: error instanceof Error ? error.message : "Copilot could not answer right now.",
+        },
+      ])
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  askRef.current = (question: string) => {
+    setIsOpen(true)
+    void ask(question)
+  }
+
+  useEffect(() => {
+    function handleCommandBarAsk(event: Event) {
+      const customEvent = event as CustomEvent<{ question?: string }>
+      const question = String(customEvent.detail?.question || "").trim()
+      if (!question) return
+      askRef.current(question)
+    }
+
+    window.addEventListener("behaviourai:copilot:ask", handleCommandBarAsk)
+    return () => window.removeEventListener("behaviourai:copilot:ask", handleCommandBarAsk)
+  }, [])
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    void ask(input)
+  }
+
+  return (
+    <div className="fixed bottom-5 right-5 z-50">
+      {isOpen ? (
+        <div className="mb-3 flex h-[min(720px,calc(100vh-48px))] w-[min(440px,calc(100vw-40px))] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/15">
+          <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-blue-600 text-white">
+                <Bot className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-slate-950">AI Copilot</div>
+                <div className="truncate text-xs text-slate-500">
+                  {meta ? `${meta.mode} · ${meta.model} · data ${timeAgo(meta.data_as_of)}` : "Site-aware business assistant"}
+                </div>
+              </div>
+            </div>
+            <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsOpen(false)}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 px-4 py-4">
+            {messages.map((message, index) => (
+              <div
+                key={`${message.role}-${index}`}
+                className={cn(
+                  "max-w-[88%] rounded-lg px-3 py-2 text-sm leading-6 shadow-sm",
+                  message.role === "user"
+                    ? "ml-auto bg-blue-600 text-white"
+                    : "border border-slate-200 bg-white text-slate-700"
+                )}
+              >
+                {message.role === "assistant" ? <MarkdownMessage content={message.content} /> : message.content}
+              </div>
+            ))}
+            {isLoading ? (
+              <div className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500 shadow-sm">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Thinking
+              </div>
+            ) : null}
+            <div ref={messagesEndRef} />
+          </div>
+
+          <div className="border-t border-slate-100 bg-white px-4 py-3">
+            {actions.length ? (
+              <div className="mb-3">
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowActions((current) => !current)}
+                    className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    {showActions ? "Hide suggested actions" : `${actions.length} suggested actions`}
+                  </button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-slate-400 hover:text-slate-700"
+                    onClick={() => {
+                      setActions([])
+                      setShowActions(false)
+                    }}
+                    aria-label="Dismiss suggested actions"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                {showActions ? (
+                  <div className="mt-2 grid max-h-36 gap-2 overflow-y-auto rounded-lg border border-slate-100 bg-slate-50 p-2">
+                    {actions.map((action) => (
+                      <Link
+                        key={`${action.label}-${action.href}`}
+                        href={action.href}
+                        className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs transition hover:border-blue-200 hover:bg-blue-50"
+                      >
+                        <div className="font-semibold text-slate-950">{action.label}</div>
+                        <div className="mt-0.5 line-clamp-2 leading-5 text-slate-500">{action.reason}</div>
+                      </Link>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {showStarterPrompts ? (
+              <div className="mb-3 flex flex-wrap gap-2">
+                {prompts.map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => void ask(prompt)}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <form onSubmit={submit} className="flex gap-2">
+              <textarea
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault()
+                    void ask(input)
+                  }
+                }}
+                rows={2}
+                placeholder="Ask about this website..."
+                className="min-h-10 flex-1 resize-none rounded-md border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+              />
+              <Button type="submit" disabled={isLoading || !input.trim()} className="h-auto bg-blue-600 px-3 hover:bg-blue-700">
+                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </Button>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      <Button type="button" onClick={() => setIsOpen((current) => !current)} className="h-12 rounded-full bg-blue-600 px-5 shadow-xl shadow-blue-900/20 hover:bg-blue-700">
+        <MessageCircle className="h-4 w-4" />
+        AI Copilot
+      </Button>
+    </div>
+  )
 }
 
 function ActiveViewContent({
   view,
   insights,
-  metricCards,
-  kpis,
 }: {
   view: DashboardView
   insights: BehaviorInsights
-  metricCards: MetricCardData[]
-  kpis: ReturnType<typeof buildKpis>
 }) {
+  const { tr } = useI18n()
+
   switch (view) {
     case "live":
       return (
         <>
           <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
-            <MetricCard label="Raw events" value={fmtInt(insights.business_overview.reach.raw_events)} helper="Events in the current analysis window" icon={Activity} tone="blue" />
-            <MetricCard label="Recent stream" value={fmtInt(insights.operations.recent_events.length)} helper="Rows loaded into the live stream" icon={Radio} tone="teal" />
-            <MetricCard label="Event types" value={fmtInt(Object.keys(insights.event_mix).length)} helper="Distinct event names observed" icon={Layers3} tone="indigo" />
-            <MetricCard label="Freshness" value={timeAgo(insights.operations.recent_events[0]?.received_at || insights.dataset.date_range_utc.max)} helper="Latest accepted event" icon={RefreshCw} tone="amber" />
+            <MetricCard label={tr("Raw events")} value={fmtInt(insights.business_overview.reach.raw_events)} helper={tr("Events in the current analysis window")} icon={Activity} tone="blue" />
+            <MetricCard label={tr("Recent stream")} value={fmtInt(insights.operations.recent_events.length)} helper={tr("Rows loaded into the live stream")} icon={Radio} tone="teal" />
+            <MetricCard label={tr("Event types")} value={fmtInt(Object.keys(insights.event_mix).length)} helper={tr("Distinct event names observed")} icon={Layers3} tone="indigo" />
+            <MetricCard label={tr("Freshness")} value={timeAgo(insights.operations.recent_events[0]?.received_at || insights.dataset.date_range_utc.max)} helper={tr("Latest accepted event")} icon={RefreshCw} tone="amber" />
           </section>
           <section className="grid gap-5 xl:grid-cols-3">
             <LiveEventStream insights={insights} />
             <EventMixCard insights={insights} />
           </section>
-          <section className="grid gap-5 xl:grid-cols-2">
-            <TrafficCard insights={insights} />
-            <DataCoverageCard insights={insights} />
-          </section>
+          <DataCoverageCard insights={insights} />
         </>
       )
     case "funnels":
@@ -2015,23 +3499,18 @@ function ActiveViewContent({
             <FunnelCard insights={insights} />
             <TrendsCard insights={insights} />
           </section>
-          <section className="grid gap-5 xl:grid-cols-2">
-            <AIAlertCard insights={insights} />
-            <SessionQualityCard insights={insights} />
-          </section>
+          <AIAlertCard insights={insights} />
         </>
       )
     case "audience":
       return (
         <>
+          <TrafficCard insights={insights} />
           <section className="grid gap-5 xl:grid-cols-2">
             <DeviceMixCard insights={insights} />
             <CustomerSignalsCard insights={insights} />
           </section>
-          <section className="grid gap-5 xl:grid-cols-2">
-            <TrafficCard insights={insights} />
-            <SessionQualityCard insights={insights} />
-          </section>
+          <SessionQualityCard insights={insights} />
         </>
       )
     case "products":
@@ -2039,25 +3518,30 @@ function ActiveViewContent({
         <>
           <section className="grid gap-5 xl:grid-cols-2">
             <ProductEngagementCard insights={insights} />
-            <AIAlertCard insights={insights} />
-          </section>
-          <section className="grid gap-5 xl:grid-cols-2">
             <EventMixCard insights={insights} />
-            <DataCoverageCard insights={insights} />
           </section>
+          <ReportExportCard insights={insights} />
         </>
       )
-    case "ai":
+    case "smart-actions":
       return (
         <>
-          <section className="grid gap-5 xl:grid-cols-2">
-            <AIAlertCard insights={insights} />
-            <ModelReadinessCard insights={insights} />
-          </section>
-          <section className="grid gap-5 xl:grid-cols-2">
-            <ProductEngagementCard insights={insights} />
-            <SessionQualityCard insights={insights} />
-          </section>
+          <SmartActionsDashboard insights={insights} />
+          <CommandBar />
+        </>
+      )
+    case "smart-intent":
+      return (
+        <>
+          <PurchaseIntentCard insights={insights} />
+          <CommandBar />
+        </>
+      )
+    case "smart-recommendations":
+      return (
+        <>
+          <RecommendationAutomationCard insights={insights} />
+          <SmartActionGuardrailsCard insights={insights} />
           <CommandBar />
         </>
       )
@@ -2068,10 +3552,7 @@ function ActiveViewContent({
             <TrendsCard insights={insights} />
             <EventMixCard insights={insights} />
           </section>
-          <section className="grid gap-5 xl:grid-cols-2">
-            <TrafficCard insights={insights} />
-            <ReportExportCard insights={insights} />
-          </section>
+          <ReportExportCard insights={insights} />
           <ComingReportCard />
         </>
       )
@@ -2118,26 +3599,11 @@ function ActiveViewContent({
 
           <ExecutiveShortcutGrid insights={insights} />
 
-          <section className="grid gap-5 xl:grid-cols-3">
-            <TrendsCard insights={insights} />
-            <AIAlertCard insights={insights} />
-          </section>
+          <SmartActionsPreviewCard insights={insights} />
 
           <section className="grid gap-5 xl:grid-cols-2">
             <FunnelCard insights={insights} />
             <ProductEngagementCard insights={insights} />
-          </section>
-
-          <section className="grid gap-5 xl:grid-cols-2">
-            <TrafficCard insights={insights} />
-            <SessionQualityCard insights={insights} />
-          </section>
-
-          <section className="grid gap-4 rounded-lg border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.05)] md:grid-cols-3">
-            {kpis.slice(4, 6).map((item) => (
-              <MetricLine key={item.id} label={item.label} value={item.formattedValue} />
-            ))}
-            <MetricLine label="Raw events" value={fmtInt(insights.business_overview.reach.raw_events)} />
           </section>
 
           <CommandBar />
@@ -2157,10 +3623,17 @@ export function DashboardPageClient({
   sites?: DashboardSite[]
   selectedSiteId?: string
 }) {
+  const { t } = useI18n()
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [refreshMessage, setRefreshMessage] = useState("")
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  const [isPageHeaderOpen, setIsPageHeaderOpen] = useState(true)
   const activeView = normalizeView(initialView)
-  const meta = viewMeta[activeView]
-  const kpis = buildKpis(insights)
+  const viewKey = viewTranslationKeys[activeView]
+  const meta = {
+    title: t(`view.${viewKey}.title`),
+    description: t(`view.${viewKey}.description`),
+  }
   const site = insights.operations.site
   const currentSite: DashboardSite = {
     site_id: site.site_id || selectedSiteId || "",
@@ -2177,112 +3650,218 @@ export function DashboardPageClient({
   const selectedSidebarSite = sidebarSites.find((item) => item.site_id === (selectedSiteId || currentSite.site_id)) || currentSite
   const latestEvent = insights.operations.recent_events[0]?.received_at || insights.dataset.date_range_utc.max
 
-  const metricCards = useMemo(
-    () => [
-      {
-        label: "Sessions",
-        value: fmtInt(insights.business_overview.reach.sessions),
-        helper: `${fmtInt(insights.business_overview.reach.visitors)} visitors in the current window`,
-        icon: Users,
-        tone: "blue" as const,
-      },
-      {
-        label: "Purchase Rate",
-        value: fmtPct(insights.business_overview.conversion.session_to_purchase_rate_pct),
-        helper: `${fmtInt(insights.business_overview.conversion.purchase_sessions)} purchase sessions`,
-        icon: CircleDollarSign,
-        tone: "teal" as const,
-      },
-      {
-        label: "Checkout Conversion",
-        value: fmtPct(insights.business_overview.conversion.checkout_to_purchase_rate_pct),
-        helper: "From checkout start to purchase completed",
-        icon: Gauge,
-        tone: "indigo" as const,
-      },
-      {
-        label: "Observed Cart Value",
-        value: fmtMoney(insights.business_overview.basket.avg_observed_cart_value_tnd),
-        helper: `${fmtInt(insights.business_overview.basket.sessions_with_cart_value)} sessions with cart value`,
-        icon: PackageSearch,
-        tone: "amber" as const,
-      },
-    ],
-    [insights]
-  )
-
   const overviewTrend = insights.daily_trends.map((row) => ({
     date: row.date.slice(5),
     events: row.events,
     sessions: row.sessions,
   }))
 
-  const handleRefresh = () => {
+  useEffect(() => {
+    const saved = window.localStorage.getItem(SIDEBAR_STORAGE_KEY)
+    if (saved === "false") {
+      setIsSidebarOpen(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(isSidebarOpen))
+  }, [isSidebarOpen])
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(PAGE_HEADER_STORAGE_KEY)
+    if (saved === "false") {
+      setIsPageHeaderOpen(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    window.localStorage.setItem(PAGE_HEADER_STORAGE_KEY, String(isPageHeaderOpen))
+  }, [isPageHeaderOpen])
+
+  const handleRefresh = async () => {
+    const siteId = site.site_id || selectedSiteId
+    if (!siteId) {
+      window.location.reload()
+      return
+    }
+
     setIsRefreshing(true)
-    window.location.reload()
+    setRefreshMessage(t("refresh.starting"))
+
+    try {
+      const response = await fetch("/api/analysis/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ site_id: siteId, lookback_hours: 24 }),
+      })
+      const result = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(result.error || t("refresh.failed"))
+      }
+
+      setRefreshMessage(t("refresh.queued"))
+      window.setTimeout(() => window.location.reload(), 2500)
+    } catch (error) {
+      setIsRefreshing(false)
+      setRefreshMessage(error instanceof Error ? error.message : t("refresh.failed"))
+    }
   }
+
+  const togglePageHeader = () => setIsPageHeaderOpen((value) => !value)
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <div className="grid min-h-screen lg:grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)_360px]">
-        <Sidebar sites={sidebarSites} currentSite={selectedSidebarSite} activeView={activeView} />
+      <div
+        className={cn(
+          "grid min-h-screen transition-[grid-template-columns] duration-300 ease-out",
+          isSidebarOpen
+            ? "lg:grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)_360px]"
+            : "lg:grid-cols-[72px_minmax(0,1fr)] xl:grid-cols-[72px_minmax(0,1fr)_360px]"
+        )}
+      >
+        <Sidebar
+          sites={sidebarSites}
+          currentSite={selectedSidebarSite}
+          activeView={activeView}
+          isCollapsed={!isSidebarOpen}
+          onToggleSidebar={() => setIsSidebarOpen((value) => !value)}
+        />
 
         <main className="min-w-0">
-          <Topbar siteLabel={site.domain || site.site_id || "tdiscount"} siteId={site.site_id || "tdiscount"} latestEvent={latestEvent} />
+          <Topbar
+            siteLabel={site.domain || site.site_id || "tdiscount"}
+            siteId={site.site_id || "tdiscount"}
+            latestEvent={latestEvent}
+            isSidebarOpen={isSidebarOpen}
+            onToggleSidebar={() => setIsSidebarOpen((value) => !value)}
+          />
 
           <div className="mx-auto max-w-[1440px] space-y-5 px-4 py-5 md:px-6">
-            <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
-              <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge className="border-blue-100 bg-blue-50 text-blue-700 hover:bg-blue-50" variant="outline">
-                      {site.platform || "wordpress"}
-                    </Badge>
-                    <StatusDot status={site.status === "active" ? "healthy" : "warning"} label={site.status || "active"} />
-                    <span className="text-xs text-slate-400">site_id: {site.site_id}</span>
-                  </div>
-                  <h1 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950 md:text-[32px] md:leading-10">
-                    {meta.title}
-                  </h1>
-                  <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-                    {meta.description}
-                  </p>
-                </div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex items-center justify-between gap-3">
+            <section
+              role="button"
+              tabIndex={0}
+              aria-expanded={isPageHeaderOpen}
+              onClick={togglePageHeader}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault()
+                  togglePageHeader()
+                }
+              }}
+              className={cn(
+                "cursor-pointer rounded-lg border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.05)] outline-none transition-all duration-300 ease-out hover:border-blue-200 focus-visible:ring-2 focus-visible:ring-blue-100",
+                isPageHeaderOpen ? "p-5" : "p-3"
+              )}
+            >
+              <div
+                aria-hidden={!isPageHeaderOpen}
+                className={cn(
+                  "grid overflow-hidden transition-[grid-template-rows,opacity,transform] duration-300 ease-out",
+                  isPageHeaderOpen ? "grid-rows-[1fr] translate-y-0 opacity-100" : "pointer-events-none grid-rows-[0fr] -translate-y-1 opacity-0"
+                )}
+              >
+                <div className="min-h-0 overflow-hidden">
+                  <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
                     <div>
-                      <div className="text-xs font-medium text-slate-500">Dataset freshness</div>
-                      <div className="mt-1 text-lg font-semibold text-slate-950">{timeAgo(latestEvent)}</div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge className="border-blue-100 bg-blue-50 text-blue-700 hover:bg-blue-50" variant="outline">
+                          {site.platform || "wordpress"}
+                        </Badge>
+                        <StatusDot status={site.status === "active" ? "healthy" : "warning"} label={site.status || "active"} />
+                        <span className="text-xs text-slate-400">{t("common.siteId")}: {site.site_id}</span>
+                      </div>
+                      <h1 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950 md:text-[32px] md:leading-10">
+                        {meta.title}
+                      </h1>
+                      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                        {meta.description}
+                      </p>
                     </div>
-                    <Button onClick={handleRefresh} disabled={isRefreshing} className="bg-blue-600 hover:bg-blue-700">
-                      <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
-                      Refresh
-                    </Button>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-xs font-medium text-slate-500">{t("common.datasetFreshness")}</div>
+                          <div className="mt-1 text-lg font-semibold text-slate-950">{timeAgo(latestEvent)}</div>
+                        </div>
+                        <Button
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            void handleRefresh()
+                          }}
+                          disabled={isRefreshing}
+                          className="bg-blue-600 hover:bg-blue-700"
+                        >
+                          <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+                          {isRefreshing ? t("common.refreshing") : t("common.refresh")}
+                        </Button>
+                      </div>
+                      {refreshMessage ? <div className="mt-2 text-xs leading-5 text-slate-500">{refreshMessage}</div> : null}
+                      <div className="mt-4 h-20">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={overviewTrend}>
+                            <defs>
+                              <linearGradient id="eventFill" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#1769E8" stopOpacity={0.28} />
+                                <stop offset="95%" stopColor="#1769E8" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <Tooltip />
+                            <Area type="monotone" dataKey="events" stroke="#1769E8" fill="url(#eventFill)" strokeWidth={2} />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
                   </div>
-                  <div className="mt-4 h-20">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={overviewTrend}>
-                        <defs>
-                          <linearGradient id="eventFill" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#1769E8" stopOpacity={0.28} />
-                            <stop offset="95%" stopColor="#1769E8" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <Tooltip />
-                        <Area type="monotone" dataKey="events" stroke="#1769E8" fill="url(#eventFill)" strokeWidth={2} />
-                      </AreaChart>
-                    </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div
+                aria-hidden={isPageHeaderOpen}
+                className={cn(
+                  "grid overflow-hidden transition-[grid-template-rows,opacity,transform] duration-300 ease-out",
+                  isPageHeaderOpen ? "pointer-events-none grid-rows-[0fr] translate-y-1 opacity-0" : "grid-rows-[1fr] translate-y-0 opacity-100"
+                )}
+              >
+                <div className="min-h-0 overflow-hidden">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <ChevronDown className="h-4 w-4 -rotate-90 text-slate-400 transition-transform duration-300" />
+                      <div className="min-w-0">
+                        <h1 className="truncate text-lg font-semibold tracking-tight text-slate-950">{meta.title}</h1>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                          <span>{site.platform || "website"}</span>
+                          <span className="h-1 w-1 rounded-full bg-slate-300" />
+                          <span>{t("common.siteId")}: {site.site_id}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div
+                      className="flex items-center gap-3"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <div className="text-right">
+                        <div className="text-[11px] font-medium text-slate-500">{t("common.datasetFreshness")}</div>
+                        <div className="text-sm font-semibold text-slate-950">{timeAgo(latestEvent)}</div>
+                      </div>
+                      <Button onClick={handleRefresh} disabled={isRefreshing} className="bg-blue-600 hover:bg-blue-700">
+                        <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+                        {isRefreshing ? t("common.refreshing") : t("common.refresh")}
+                      </Button>
+                    </div>
+                    {refreshMessage ? <div className="basis-full text-xs leading-5 text-slate-500">{refreshMessage}</div> : null}
                   </div>
                 </div>
               </div>
             </section>
 
-            <ActiveViewContent view={activeView} insights={insights} metricCards={metricCards} kpis={kpis} />
+            <ActiveViewContent view={activeView} insights={insights} />
           </div>
         </main>
 
         <RightPanel insights={insights} />
       </div>
+      <CopilotDock siteId={site.site_id || selectedSiteId || selectedSidebarSite.site_id || "tdiscount"} />
     </div>
   )
 }

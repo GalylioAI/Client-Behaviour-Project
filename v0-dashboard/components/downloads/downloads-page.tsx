@@ -21,12 +21,12 @@ const plugins = [
   {
     id: "wordpress",
     name: "WordPress / WooCommerce Tracker",
-    version: "1.0.7",
+    version: "1.0.8",
     platform: "WordPress",
-    fileName: "wordpress-behaviour-tracker-1.0.7.zip",
-    href: "/plugins/wordpress-behaviour-tracker-1.0.7.zip",
-    size: "40 KB",
-    sha256: "a8910e25ad4b5cd725270325e2b4dc29080d5700d633b4c8b5c7cdc334cc2b30",
+    fileName: "wordpress-behaviour-tracker-1.0.8.zip",
+    href: "/plugins/wordpress-behaviour-tracker-1.0.8.zip",
+    size: "42 KB",
+    sha256: "b84167bb37bac7a0d9cbc1b781abd1f2935d982d6e89183d97788e228ff0ffd2",
     sourceUrl: "https://github.com/GalylioAI/Client-Behaviour-Project/tree/wp",
     installArea: "WordPress admin -> Plugins -> Add New -> Upload Plugin",
     settingsArea: "Settings -> Behaviour Tracker",
@@ -34,12 +34,12 @@ const plugins = [
   {
     id: "prestashop",
     name: "PrestaShop Behaviour Tracker",
-    version: "1.0.7",
+    version: "1.0.10",
     platform: "PrestaShop",
-    fileName: "behaviourtracker-prestashop-1.0.7.zip",
-    href: "/plugins/behaviourtracker-prestashop-1.0.7.zip",
-    size: "49 KB",
-    sha256: "a72ed1cfe1b8d809ecf5d7d6c20b78ee5252060598ca0a8c9a667fb9c0bc6829",
+    fileName: "behaviourtracker-prestashop-1.0.10.zip",
+    href: "/plugins/behaviourtracker-prestashop-1.0.10.zip",
+    size: "57 KB",
+    sha256: "b24dcd69161025c8010bc1971c1467edc548f1e129aa7f885557a79f89f506ef",
     sourceUrl: "https://github.com/GalylioAI/Client-Behaviour-Project/tree/Prestashop_module",
     installArea: "PrestaShop admin -> Modules -> Module Manager -> Upload a module",
     settingsArea: "Modules -> Customer Behaviour Tracker -> Configure",
@@ -162,7 +162,7 @@ export function DownloadsPage({ siteId }: { siteId?: string }) {
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline" className="border-blue-100 bg-blue-50 text-blue-700">
-                  WordPress 1.0.7 / PrestaShop 1.0.7
+                  WordPress 1.0.8 / PrestaShop 1.0.10
                 </Badge>
                 <Badge variant="outline" className="border-emerald-100 bg-emerald-50 text-emerald-700">
                   <Github className="h-3 w-3" />

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Layer 2 behaviour analytics pipeline.
+Behaviour insights analytics pipeline.
 
 Input:
     tracer.ecommerce_events
@@ -116,11 +116,18 @@ CREATE TABLE IF NOT EXISTS session_features
     is_bounce UInt8,
     is_cart_abandoned UInt8,
     is_checkout_abandoned UInt8,
+    purchase_intent_score Float64 DEFAULT 0,
+    purchase_intent_tier LowCardinality(String) DEFAULT 'cold',
+    purchase_intent_reason String DEFAULT '',
     updated_at DateTime64(3, 'UTC')
 )
 ENGINE = ReplacingMergeTree(updated_at)
 PARTITION BY toYYYYMM(session_start)
 ORDER BY (site_id, session_id);
+
+ALTER TABLE session_features ADD COLUMN IF NOT EXISTS purchase_intent_score Float64 DEFAULT 0;
+ALTER TABLE session_features ADD COLUMN IF NOT EXISTS purchase_intent_tier LowCardinality(String) DEFAULT 'cold';
+ALTER TABLE session_features ADD COLUMN IF NOT EXISTS purchase_intent_reason String DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS visitor_features
 (
@@ -148,10 +155,17 @@ CREATE TABLE IF NOT EXISTS visitor_features
     country LowCardinality(String),
     engagement_score Float64,
     buyer_stage LowCardinality(String),
+    purchase_intent_score Float64 DEFAULT 0,
+    purchase_intent_tier LowCardinality(String) DEFAULT 'cold',
+    purchase_intent_reason String DEFAULT '',
     updated_at DateTime64(3, 'UTC')
 )
 ENGINE = ReplacingMergeTree(updated_at)
 ORDER BY (site_id, visitor_id);
+
+ALTER TABLE visitor_features ADD COLUMN IF NOT EXISTS purchase_intent_score Float64 DEFAULT 0;
+ALTER TABLE visitor_features ADD COLUMN IF NOT EXISTS purchase_intent_tier LowCardinality(String) DEFAULT 'cold';
+ALTER TABLE visitor_features ADD COLUMN IF NOT EXISTS purchase_intent_reason String DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS site_hourly_metrics
 (
@@ -238,6 +252,7 @@ CREATE TABLE IF NOT EXISTS product_daily_metrics
     metric_date Date,
     product_id String,
     product_name String,
+    product_url String DEFAULT '',
     product_category String,
     impressions UInt64,
     views UInt64,
@@ -255,6 +270,8 @@ CREATE TABLE IF NOT EXISTS product_daily_metrics
 ENGINE = ReplacingMergeTree(updated_at)
 PARTITION BY toYYYYMM(metric_date)
 ORDER BY (site_id, metric_date, product_id);
+
+ALTER TABLE product_daily_metrics ADD COLUMN IF NOT EXISTS product_url String DEFAULT '' AFTER product_name;
 
 CREATE TABLE IF NOT EXISTS page_daily_metrics
 (
@@ -349,6 +366,96 @@ CREATE TABLE IF NOT EXISTS site_latest_insights
 )
 ENGINE = ReplacingMergeTree(updated_at)
 ORDER BY (site_id, insight_key);
+
+CREATE TABLE IF NOT EXISTS product_catalog
+(
+    site_id LowCardinality(String),
+    platform LowCardinality(String),
+    product_id String,
+    product_name String,
+    product_url String,
+    product_category String,
+    impressions UInt64,
+    views UInt64,
+    clicks UInt64,
+    add_to_cart_events UInt64,
+    purchase_events UInt64,
+    revenue Float64,
+    last_seen DateTime64(3, 'UTC'),
+    updated_at DateTime64(3, 'UTC')
+)
+ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY (site_id, product_id);
+
+CREATE TABLE IF NOT EXISTS customer_recommendation_candidates
+(
+    site_id LowCardinality(String),
+    platform LowCardinality(String),
+    generated_at DateTime64(3, 'UTC'),
+    window_start DateTime64(3, 'UTC'),
+    window_end DateTime64(3, 'UTC'),
+    recommendation_id String,
+    visitor_id String,
+    customer_id String,
+    customer_email String,
+    product_id String,
+    product_name String,
+    product_url String,
+    product_category String,
+    recommendation_type LowCardinality(String),
+    reason String,
+    score Float64,
+    rec_rank UInt8,
+    views UInt64,
+    add_to_cart_events UInt64,
+    purchase_events UInt64,
+    last_signal_at DateTime64(3, 'UTC'),
+    status LowCardinality(String) DEFAULT 'ready'
+)
+ENGINE = MergeTree
+PARTITION BY toYYYYMM(generated_at)
+ORDER BY (site_id, generated_at, visitor_id, rec_rank, recommendation_id);
+
+CREATE TABLE IF NOT EXISTS recommendation_email_outbox
+(
+    email_id String,
+    campaign_key String,
+    tenant_id String,
+    site_id LowCardinality(String),
+    visitor_id String,
+    customer_id String,
+    to_email String,
+    subject String,
+    preview_text String,
+    status LowCardinality(String) DEFAULT 'prepared',
+    provider LowCardinality(String) DEFAULT 'mock',
+    recommendation_ids Array(String),
+    product_ids Array(String),
+    body_text String,
+    body_html String,
+    generated_at DateTime64(3, 'UTC'),
+    created_at DateTime64(3, 'UTC') DEFAULT now64(3),
+    sent_at Nullable(DateTime64(3, 'UTC')),
+    updated_at DateTime64(3, 'UTC') DEFAULT now64(3)
+)
+ENGINE = ReplacingMergeTree(updated_at)
+PARTITION BY toYYYYMM(created_at)
+ORDER BY (site_id, campaign_key, to_email);
+
+CREATE TABLE IF NOT EXISTS site_automation_settings
+(
+    site_id String,
+    tenant_id String,
+    recommendation_intensity UInt8 DEFAULT 5,
+    sending_mode LowCardinality(String) DEFAULT 'draft_only',
+    max_emails_per_customer_week UInt8 DEFAULT 2,
+    cooldown_hours UInt16 DEFAULT 72,
+    consent_required UInt8 DEFAULT 1,
+    created_at DateTime64(3, 'UTC') DEFAULT now64(3),
+    updated_at DateTime64(3, 'UTC') DEFAULT now64(3)
+)
+ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY (tenant_id, site_id);
 """
 
 
@@ -481,6 +588,21 @@ PRODUCT_ID = (
     f"nullIf({json_text('context_product_id')}, ''), '')"
 )
 PRODUCT_NAME = f"coalesce(nullIf({json_text('product_name')}, ''), nullIf({json_text('name')}, ''), '')"
+PRODUCT_NAME_BLOCKLIST = (
+    "'accueil', 'home', 'recherche', 'search', 'produit', 'produits', "
+    "'product', 'products', 'promos', 'promotion', 'panier', 'cart', "
+    "'checkout', 'commande', 'order', 'orders', 'compte', 'account', "
+    "'login', 'connexion', 'register', 'inscription', 'contact', "
+    "'categorie', 'category', 'wishlist', 'favoris', 'الرئيسية'"
+)
+PRODUCT_URL_EXPLICIT = (
+    f"coalesce(nullIf({json_text('product_url')}, ''), "
+    f"nullIf({json_text('product_permalink')}, ''), "
+    f"nullIf({json_text('permalink')}, ''), "
+    f"nullIf({json_text('href')}, ''), "
+    f"nullIf({json_text('url')}, ''), '')"
+)
+PRODUCT_URL = f"coalesce(nullIf({PRODUCT_URL_EXPLICIT}, ''), nullIf(page_url, ''), '')"
 PRODUCT_CATEGORY = (
     f"coalesce(nullIf({json_text('product_category')}, ''), "
     f"nullIf({json_text('category')}, ''), '')"
@@ -600,6 +722,63 @@ def refresh_session_features(client: ClickHouseHttpClient, site_id: str, start: 
     client.execute(
         f"""
         INSERT INTO session_features
+        (
+            site_id,
+            platform,
+            session_id,
+            visitor_id,
+            customer_id,
+            customer_email,
+            session_start,
+            session_end,
+            duration_sec,
+            event_count,
+            page_view_count,
+            product_view_count,
+            product_impression_count,
+            click_count,
+            scroll_event_count,
+            search_event_count,
+            zero_result_search_count,
+            add_to_cart_count,
+            remove_from_cart_count,
+            cart_view_count,
+            checkout_start_count,
+            shipping_selection_count,
+            payment_selection_count,
+            payment_failed_count,
+            purchase_count,
+            registration_count,
+            login_count,
+            newsletter_opt_in_count,
+            unique_pages,
+            unique_products_viewed,
+            unique_products_added_cart,
+            max_scroll_pct,
+            cart_value_max,
+            order_total_max,
+            revenue,
+            device_type,
+            first_page_type,
+            first_page_url,
+            last_page_url,
+            referrer_url,
+            country,
+            region,
+            city,
+            is_new_visitor,
+            has_product_view,
+            has_add_to_cart,
+            has_checkout_start,
+            has_purchase,
+            is_bounce,
+            is_cart_abandoned,
+            is_checkout_abandoned,
+            purchase_intent_score,
+            purchase_intent_tier,
+            purchase_intent_reason,
+            updated_at
+        )
         WITH
             reversed_orders AS
             (
@@ -676,6 +855,55 @@ def refresh_session_features(client: ClickHouseHttpClient, site_id: str, start: 
             toUInt8(page_view_count <= 1 AND duration_sec <= 15) AS is_bounce,
             toUInt8((add_to_cart_count > 0 OR cart_view_count > 0) AND purchase_count = 0) AS is_cart_abandoned,
             toUInt8(checkout_start_count > 0 AND purchase_count = 0) AS is_checkout_abandoned,
+            round(
+                greatest(
+                    0,
+                    least(
+                        100,
+                        if(
+                            purchase_count > 0,
+                            100,
+                            6
+                            + least(product_view_count, 6) * 5
+                            + least(product_impression_count, 10) * 0.8
+                            + least(unique_products_viewed, 5) * 4
+                            + least(add_to_cart_count + cart_view_count, 4) * 14
+                            + least(checkout_start_count, 1) * 18
+                            + least(shipping_selection_count + payment_selection_count, 2) * 7
+                            + least(search_event_count, 3) * 4
+                            + least(click_count, 12) * 0.8
+                            + least(scroll_event_count, 6) * 1.5
+                            + least(duration_sec, 420) / 420 * 10
+                            + least(event_count, 40) / 40 * 8
+                            + if(cart_value_max > 0, least(log(1 + cart_value_max), 6) * 2.5, 0)
+                            + if(login_count > 0 OR registration_count > 0, 6, 0)
+                            + if(is_new_visitor = 0, 3, 0)
+                            - if(remove_from_cart_count > 0, 7, 0)
+                            - if(payment_failed_count > 0, 10, 0)
+                            - if(zero_result_search_count > 0, 5, 0)
+                            - if(page_view_count <= 1 AND duration_sec <= 15, 18, 0)
+                        )
+                    )
+                ),
+                2
+            ) AS purchase_intent_score,
+            multiIf(
+                purchase_count > 0, 'converted',
+                purchase_intent_score >= 75, 'high',
+                purchase_intent_score >= 50, 'medium',
+                purchase_intent_score >= 25, 'low',
+                'cold'
+            ) AS purchase_intent_tier,
+            multiIf(
+                purchase_count > 0, 'Purchase completed',
+                payment_failed_count > 0, 'Payment failed after checkout',
+                checkout_start_count > 0 OR payment_selection_count > 0 OR shipping_selection_count > 0, 'Checkout activity',
+                add_to_cart_count > 0 OR cart_view_count > 0, 'Cart activity',
+                search_event_count > 0 AND product_view_count > 0, 'Search plus product views',
+                product_view_count >= 3 OR unique_products_viewed >= 2, 'Multiple product views',
+                page_view_count <= 1 AND duration_sec <= 15, 'Short bounce session',
+                'Browsing activity'
+            ) AS purchase_intent_reason,
             now64(3) AS updated_at
         FROM
         (
@@ -755,29 +983,59 @@ def refresh_visitor_features(client: ClickHouseHttpClient, site_id: str, start: 
     client.execute(
         f"""
         INSERT INTO visitor_features
+        (
+            site_id,
+            visitor_id,
+            first_seen,
+            last_seen,
+            sessions,
+            total_events,
+            total_duration_sec,
+            page_views,
+            product_views,
+            product_impressions,
+            add_to_cart_events,
+            checkout_starts,
+            purchases,
+            registration_events,
+            login_events,
+            revenue,
+            avg_session_duration_sec,
+            active_days,
+            is_repeat_visitor,
+            is_customer,
+            last_device_type,
+            country,
+            engagement_score,
+            buyer_stage,
+            purchase_intent_score,
+            purchase_intent_tier,
+            purchase_intent_reason,
+            updated_at
+        )
         SELECT
             site_id,
             visitor_id,
-            min(session_start) AS first_seen,
-            max(session_end) AS last_seen,
-            count() AS sessions,
-            sum(event_count) AS total_events,
-            sum(duration_sec) AS total_duration_sec,
-            sum(page_view_count) AS page_views,
-            sum(product_view_count) AS product_views,
-            sum(product_impression_count) AS product_impressions,
-            sum(add_to_cart_count) AS add_to_cart_events,
-            sum(checkout_start_count) AS checkout_starts,
-            sum(purchase_count) AS purchases,
-            sum(registration_count) AS registration_events,
-            sum(login_count) AS login_events,
-            sum(revenue) AS revenue,
-            round(avg(duration_sec), 2) AS avg_session_duration_sec,
-            uniqExact(toDate(session_start)) AS active_days,
+            first_seen,
+            last_seen,
+            sessions,
+            total_events,
+            total_duration_sec,
+            page_views,
+            product_views,
+            product_impressions,
+            add_to_cart_events,
+            checkout_starts,
+            purchases,
+            registration_events,
+            login_events,
+            revenue,
+            avg_session_duration_sec,
+            active_days,
             toUInt8(sessions > 1) AS is_repeat_visitor,
             toUInt8(purchases > 0 OR registration_events > 0) AS is_customer,
-            coalesce(nullIf(argMax(device_type, session_end), ''), 'unknown') AS last_device_type,
-            coalesce(nullIf(argMax(country, session_end), ''), 'unknown') AS country,
+            last_device_type,
+            country,
             round(
                 least(
                     100,
@@ -796,20 +1054,105 @@ def refresh_visitor_features(client: ClickHouseHttpClient, site_id: str, start: 
                 product_views > 0, 'browser',
                 'low_intent'
             ) AS buyer_stage,
+            round(
+                greatest(
+                    0,
+                    least(
+                        100,
+                        if(
+                            purchases > 0,
+                            100,
+                            max_session_purchase_intent_score
+                            + least(sessions, 5) * 3
+                            + least(active_days, 5) * 2
+                            + if(registration_events > 0 OR login_events > 0, 5, 0)
+                        )
+                    )
+                ),
+                2
+            ) AS purchase_intent_score,
+            multiIf(
+                purchases > 0, 'converted',
+                greatest(
+                    0,
+                    least(
+                        100,
+                        max_session_purchase_intent_score
+                        + least(sessions, 5) * 3
+                        + least(active_days, 5) * 2
+                        + if(registration_events > 0 OR login_events > 0, 5, 0)
+                    )
+                ) >= 75, 'high',
+                greatest(
+                    0,
+                    least(
+                        100,
+                        max_session_purchase_intent_score
+                        + least(sessions, 5) * 3
+                        + least(active_days, 5) * 2
+                        + if(registration_events > 0 OR login_events > 0, 5, 0)
+                    )
+                ) >= 50, 'medium',
+                greatest(
+                    0,
+                    least(
+                        100,
+                        max_session_purchase_intent_score
+                        + least(sessions, 5) * 3
+                        + least(active_days, 5) * 2
+                        + if(registration_events > 0 OR login_events > 0, 5, 0)
+                    )
+                ) >= 25, 'low',
+                'cold'
+            ) AS purchase_intent_tier,
+            multiIf(
+                purchases > 0, 'Purchase completed',
+                checkout_starts > 0, 'Checkout activity',
+                add_to_cart_events > 0, 'Cart activity',
+                product_views >= 3, 'Multiple product views',
+                max_session_purchase_intent_score > 0, top_session_purchase_intent_reason,
+                'Browsing activity'
+            ) AS purchase_intent_reason,
             now64(3) AS updated_at
-        FROM session_features FINAL
-        WHERE site_id = {quote(site_id)}
-          AND visitor_id != ''
-          AND visitor_id IN
-          (
-              SELECT DISTINCT visitor_id
-              FROM session_features FINAL
-              WHERE site_id = {quote(site_id)}
-                AND session_start >= {dt_literal(start)}
-                AND session_start < {dt_literal(end)}
-                AND visitor_id != ''
-          )
-        GROUP BY site_id, visitor_id
+        FROM
+        (
+            SELECT
+                site_id,
+                visitor_id,
+                min(session_start) AS first_seen,
+                max(session_end) AS last_seen,
+                count() AS sessions,
+                sum(event_count) AS total_events,
+                sum(duration_sec) AS total_duration_sec,
+                sum(page_view_count) AS page_views,
+                sum(product_view_count) AS product_views,
+                sum(product_impression_count) AS product_impressions,
+                sum(add_to_cart_count) AS add_to_cart_events,
+                sum(checkout_start_count) AS checkout_starts,
+                sum(purchase_count) AS purchases,
+                sum(registration_count) AS registration_events,
+                sum(login_count) AS login_events,
+                sum(revenue) AS revenue,
+                round(avg(duration_sec), 2) AS avg_session_duration_sec,
+                uniqExact(toDate(session_start)) AS active_days,
+                coalesce(nullIf(argMax(device_type, session_end), ''), 'unknown') AS last_device_type,
+                coalesce(nullIf(argMax(country, session_end), ''), 'unknown') AS country,
+                max(purchase_intent_score) AS max_session_purchase_intent_score,
+                argMax(purchase_intent_reason, purchase_intent_score) AS top_session_purchase_intent_reason
+            FROM session_features FINAL
+            WHERE site_id = {quote(site_id)}
+              AND visitor_id != ''
+              AND visitor_id IN
+              (
+                  SELECT DISTINCT visitor_id
+                  FROM session_features FINAL
+                  WHERE site_id = {quote(site_id)}
+                    AND session_start >= {dt_literal(start)}
+                    AND session_start < {dt_literal(end)}
+                    AND visitor_id != ''
+              )
+            GROUP BY site_id, visitor_id
+        )
         """
     )
 
@@ -988,6 +1331,27 @@ def refresh_product_daily_metrics(client: ClickHouseHttpClient, site_id: str, st
     client.execute(
         f"""
         INSERT INTO product_daily_metrics
+        (
+            site_id,
+            platform,
+            metric_date,
+            product_id,
+            product_name,
+            product_url,
+            product_category,
+            impressions,
+            views,
+            clicks,
+            add_to_cart_events,
+            remove_from_cart_events,
+            purchase_events,
+            sessions,
+            visitors,
+            revenue,
+            view_to_cart_rate_pct,
+            cart_to_purchase_rate_pct,
+            updated_at
+        )
         WITH
             reversed_orders AS
             (
@@ -1000,6 +1364,20 @@ def refresh_product_daily_metrics(client: ClickHouseHttpClient, site_id: str, st
             ),
             {PRODUCT_ID} AS product_key,
             {PRODUCT_NAME} AS product_name_key,
+            if(lowerUTF8(trim(product_name_key)) IN ({PRODUCT_NAME_BLOCKLIST}), '', product_name_key) AS product_name_valid_key,
+            {PRODUCT_URL_EXPLICIT} AS product_url_explicit_key,
+            {PRODUCT_URL} AS product_url_key,
+            trim(
+                replaceRegexpAll(
+                    replaceRegexpAll(
+                        replaceRegexpAll(extract(product_url_key, '/([^/?#]+)(?:[?#]|$)'), '\\.html?$', ''),
+                        '^\\d+[-_]',
+                        ''
+                    ),
+                    '[-_]+',
+                    ' '
+                )
+            ) AS product_name_from_url_key,
             {PRODUCT_CATEGORY} AS product_category_key,
             {ORDER_TOTAL} AS order_total_value,
             toUInt8(
@@ -1014,8 +1392,18 @@ def refresh_product_daily_metrics(client: ClickHouseHttpClient, site_id: str, st
             coalesce(nullIf(anyLast(platform), ''), 'unknown') AS platform,
             toDate(event_timestamp) AS metric_date,
             product_key AS product_id,
-            coalesce(nullIf(anyLast(product_name_key), ''), '') AS product_name,
-            coalesce(nullIf(anyLast(product_category_key), ''), '') AS product_category,
+            coalesce(
+                nullIf(argMaxIf(product_name_valid_key, event_timestamp, product_name_valid_key != ''), ''),
+                nullIf(argMaxIf(product_name_from_url_key, event_timestamp, product_name_from_url_key != '' AND (event_name = 'product_view' OR product_url_explicit_key != '')), ''),
+                nullIf(argMaxIf(product_name_from_url_key, event_timestamp, product_name_from_url_key != ''), ''),
+                ''
+            ) AS product_name,
+            coalesce(
+                nullIf(argMaxIf(product_url_key, event_timestamp, product_url_key != '' AND (event_name = 'product_view' OR product_url_explicit_key != '')), ''),
+                nullIf(argMaxIf(product_url_key, event_timestamp, product_url_key != ''), ''),
+                ''
+            ) AS product_url,
+            coalesce(nullIf(argMaxIf(product_category_key, event_timestamp, product_category_key != ''), ''), '') AS product_category,
             countIf(event_name = 'product_impression') AS impressions,
             countIf(event_name = 'product_view') AS views,
             countIf(event_name = 'click') AS clicks,
@@ -1211,6 +1599,318 @@ def refresh_data_quality_daily(client: ClickHouseHttpClient, site_id: str, start
           AND event_timestamp >= {dt_literal(start)}
           AND event_timestamp < {dt_literal(end)}
         GROUP BY site_id, metric_date
+        """
+    )
+
+
+def refresh_product_catalog(client: ClickHouseHttpClient, site_id: str, start: datetime, end: datetime) -> None:
+    client.execute(
+        f"""
+        INSERT INTO product_catalog
+        SELECT
+            site_id,
+            coalesce(nullIf(argMaxIf(platform, updated_at, platform != ''), ''), 'unknown') AS platform,
+            product_id,
+            coalesce(nullIf(argMaxIf(product_name, updated_at, product_name != ''), ''), product_id) AS product_name,
+            coalesce(nullIf(argMaxIf(product_url, updated_at, product_url != ''), ''), '') AS product_url,
+            coalesce(nullIf(argMaxIf(product_category, updated_at, product_category != ''), ''), '') AS product_category,
+            sum(impressions) AS impressions,
+            sum(views) AS views,
+            sum(clicks) AS clicks,
+            sum(add_to_cart_events) AS add_to_cart_events,
+            sum(purchase_events) AS purchase_events,
+            sum(revenue) AS revenue,
+            max(toDateTime64(metric_date, 3, 'UTC')) AS last_seen,
+            now64(3) AS updated_at
+        FROM product_daily_metrics FINAL
+        WHERE site_id = {quote(site_id)}
+          AND metric_date >= toDate({dt_literal(start)})
+          AND metric_date <= toDate({dt_literal(end)})
+          AND product_id != ''
+        GROUP BY site_id, product_id
+        """
+    )
+
+
+def refresh_customer_recommendations(client: ClickHouseHttpClient, site_id: str, start: datetime, end: datetime) -> None:
+    client.execute(
+        f"""
+        INSERT INTO customer_recommendation_candidates
+        WITH
+            {dt_literal(start)} AS window_start_key,
+            {dt_literal(end)} AS window_end_key,
+            now64(3) AS generated_at_key
+        SELECT
+            site_id,
+            platform,
+            generated_at_key AS generated_at,
+            window_start_key AS window_start,
+            window_end_key AS window_end,
+            concat('rec_', site_id, '_', lower(hex(MD5(visitor_key))), '_', product_id) AS recommendation_id,
+            visitor_id,
+            customer_id,
+            customer_email,
+            product_id,
+            product_name,
+            product_url,
+            product_category,
+            recommendation_type,
+            reason,
+            score,
+            toUInt8(rec_rank) AS rec_rank,
+            views,
+            add_to_cart_events,
+            purchase_events,
+            last_signal_at,
+            'ready' AS status
+        FROM
+        (
+            SELECT
+                *,
+                row_number() OVER (PARTITION BY site_id, visitor_key ORDER BY score DESC, last_signal_at DESC, product_id) AS rec_rank
+            FROM
+            (
+                SELECT
+                    journey.site_id AS site_id,
+                    coalesce(nullIf(journey.platform, ''), nullIf(catalog.platform, ''), 'unknown') AS platform,
+                    journey.visitor_key AS visitor_key,
+                    journey.visitor_id AS visitor_id,
+                    journey.customer_id AS customer_id,
+                    journey.customer_email AS customer_email,
+                    journey.product_id AS product_id,
+                    coalesce(nullIf(journey.product_name, ''), nullIf(catalog.product_name, ''), journey.product_id) AS product_name,
+                    coalesce(nullIf(journey.product_url, ''), nullIf(catalog.product_url, ''), '') AS product_url,
+                    coalesce(nullIf(journey.product_category, ''), nullIf(catalog.product_category, ''), '') AS product_category,
+                    journey.views AS views,
+                    journey.clicks AS clicks,
+                    journey.add_to_cart_events AS add_to_cart_events,
+                    journey.purchase_events AS purchase_events,
+                    journey.last_signal_at AS last_signal_at,
+                    multiIf(
+                        journey.add_to_cart_events > journey.purchase_events AND journey.add_to_cart_events > 0, 'abandoned_cart',
+                        journey.views >= 3, 'repeated_interest',
+                        journey.clicks > 0, 'clicked_product',
+                        'recent_view'
+                    ) AS recommendation_type,
+                    multiIf(
+                        journey.add_to_cart_events > journey.purchase_events AND journey.add_to_cart_events > 0,
+                        concat('Added to cart ', toString(journey.add_to_cart_events), ' time(s) but no matching purchase was observed.'),
+                        journey.views >= 3,
+                        concat('Viewed ', toString(journey.views), ' time(s), showing repeated interest.'),
+                        journey.clicks > 0,
+                        'Clicked or interacted with this product during the journey.',
+                        'Recently viewed product with active browsing intent.'
+                    ) AS reason,
+                    round(
+                        greatest(
+                            1,
+                            least(
+                                100,
+                                (journey.views * 10)
+                                + (journey.clicks * 4)
+                                + (journey.add_to_cart_events * 35)
+                                + if(dateDiff('hour', journey.last_signal_at, window_end_key) <= 24, 15, 0)
+                                + if(dateDiff('hour', journey.last_signal_at, window_end_key) <= 72, 8, 0)
+                                - (journey.purchase_events * 20)
+                            )
+                        ),
+                        2
+                    ) AS score
+                FROM
+                (
+                    SELECT
+                        site_id,
+                        coalesce(nullIf(anyLast(platform), ''), 'unknown') AS platform,
+                        visitor_key,
+                        coalesce(nullIf(argMaxIf(visitor_id, event_timestamp, visitor_id != ''), ''), visitor_key) AS visitor_id,
+                        coalesce(nullIf(argMaxIf(customer_id, event_timestamp, customer_id != ''), ''), '') AS customer_id,
+                        coalesce(nullIf(argMaxIf(ifNull(customer_email, ''), event_timestamp, ifNull(customer_email, '') != ''), ''), '') AS customer_email,
+                        product_key AS product_id,
+                        coalesce(nullIf(argMaxIf(product_name_valid_key, event_timestamp, product_name_valid_key != ''), ''), '') AS product_name,
+                        coalesce(nullIf(argMaxIf(product_url_key, event_timestamp, product_url_key != ''), ''), '') AS product_url,
+                        coalesce(nullIf(argMaxIf(product_category_key, event_timestamp, product_category_key != ''), ''), '') AS product_category,
+                        countIf(event_name = 'product_view') AS views,
+                        countIf(event_name = 'click') AS clicks,
+                        countIf(event_name = 'add_to_cart') AS add_to_cart_events,
+                        countIf(event_name = 'purchase_completed') AS purchase_events,
+                        max(event_timestamp) AS last_signal_at
+                    FROM
+                    (
+                        SELECT
+                            *,
+                            {PRODUCT_ID} AS product_key,
+                            {PRODUCT_NAME} AS product_name_key,
+                            if(lowerUTF8(trim(product_name_key)) IN ({PRODUCT_NAME_BLOCKLIST}), '', product_name_key) AS product_name_valid_key,
+                            {PRODUCT_URL} AS product_url_key,
+                            {PRODUCT_CATEGORY} AS product_category_key,
+                            if(
+                                visitor_id != '',
+                                visitor_id,
+                                if(
+                                    customer_id != '',
+                                    concat('customer:', customer_id),
+                                    if(ifNull(customer_email, '') != '', concat('email:', lowerUTF8(ifNull(customer_email, ''))), session_id)
+                                )
+                            ) AS visitor_key
+                        FROM ecommerce_events
+                        WHERE site_id = {quote(site_id)}
+                          AND event_timestamp >= window_start_key
+                          AND event_timestamp < window_end_key
+                          AND event_name IN ('product_view', 'add_to_cart', 'click', 'product_quick_view', 'product_review_read', 'product_zoom', 'purchase_completed')
+                    )
+                    WHERE product_key != ''
+                      AND visitor_key != ''
+                    GROUP BY site_id, visitor_key, product_key
+                ) AS journey
+                LEFT JOIN
+                (
+                    SELECT *
+                    FROM product_catalog FINAL
+                    WHERE site_id = {quote(site_id)}
+                ) AS catalog
+                ON journey.site_id = catalog.site_id AND journey.product_id = catalog.product_id
+            )
+            WHERE score >= 20
+              AND product_url != ''
+              AND lowerUTF8(trim(product_name)) NOT IN ({PRODUCT_NAME_BLOCKLIST})
+        )
+        WHERE rec_rank <= 5
+        """
+    )
+
+
+def automation_intensity_threshold(level: int) -> int:
+    thresholds = {
+        1: 88,
+        2: 80,
+        3: 72,
+        4: 64,
+        5: 56,
+        6: 48,
+        7: 40,
+        8: 32,
+        9: 22,
+        10: 0,
+    }
+    return thresholds.get(max(1, min(int(level or 5), 10)), 56)
+
+
+def load_automation_settings(client: ClickHouseHttpClient, site_id: str) -> dict:
+    rows = client.query_json(
+        f"""
+        SELECT
+            recommendation_intensity,
+            sending_mode,
+            max_emails_per_customer_week,
+            cooldown_hours,
+            consent_required
+        FROM site_automation_settings FINAL
+        WHERE site_id = {quote(site_id)}
+        ORDER BY updated_at DESC
+        LIMIT 1
+        """
+    )
+    row = rows[0] if rows else {}
+    intensity = max(1, min(int(row.get("recommendation_intensity") or 5), 10))
+    return {
+        "recommendation_intensity": intensity,
+        "threshold": automation_intensity_threshold(intensity),
+        "sending_mode": row.get("sending_mode") or "draft_only",
+        "max_emails_per_customer_week": int(row.get("max_emails_per_customer_week") or 2),
+        "cooldown_hours": int(row.get("cooldown_hours") or 72),
+        "consent_required": int(row.get("consent_required") or 1),
+    }
+
+
+def refresh_recommendation_email_outbox(client: ClickHouseHttpClient, site_id: str) -> None:
+    settings = load_automation_settings(client, site_id)
+    intensity = settings["recommendation_intensity"]
+    threshold = settings["threshold"]
+    abandoned_cart_threshold = max(threshold - 12, 0)
+    recommendation_filter = f"""
+              AND (
+                (recommendation_type = 'abandoned_cart' AND score >= {abandoned_cart_threshold})
+                OR ({intensity} >= 4 AND recommendation_type = 'repeated_interest' AND score >= {threshold})
+                OR ({intensity} >= 7 AND recommendation_type = 'clicked_product' AND score >= {threshold})
+                OR ({intensity} >= 8 AND recommendation_type = 'recent_view' AND score >= {threshold})
+              )
+    """
+    client.execute(
+        f"""
+        INSERT INTO recommendation_email_outbox
+        (
+            email_id,
+            campaign_key,
+            tenant_id,
+            site_id,
+            visitor_id,
+            customer_id,
+            to_email,
+            subject,
+            preview_text,
+            status,
+            provider,
+            recommendation_ids,
+            product_ids,
+            body_text,
+            body_html,
+            generated_at,
+            created_at,
+            updated_at
+        )
+        WITH
+            (
+                SELECT max(generated_at)
+                FROM customer_recommendation_candidates
+                WHERE site_id = {quote(site_id)}
+            ) AS latest_generated_at,
+            (
+                SELECT coalesce(nullIf(anyLast(tenant_id), ''), '')
+                FROM sites
+                WHERE site_id = {quote(site_id)}
+            ) AS tenant_id_key
+        SELECT
+            concat('rec_email_', site_id, '_', lower(hex(MD5(to_email))), '_', formatDateTime(latest_generated_at, '%Y%m%d')) AS email_id,
+            concat('daily_recommendations_', formatDateTime(latest_generated_at, '%Y%m%d')) AS campaign_key,
+            tenant_id_key AS tenant_id,
+            site_id,
+            argMax(visitor_id, score) AS visitor_id,
+            argMax(customer_id, score) AS customer_id,
+            to_email,
+            concat('Products picked for you from ', site_id) AS subject,
+            concat('Recommended for you: ', arrayStringConcat(groupArray(product_name), ', ')) AS preview_text,
+            'prepared' AS status,
+            'mock' AS provider,
+            groupArray(recommendation_id) AS recommendation_ids,
+            groupArray(product_id) AS product_ids,
+            concat(
+                'Hi,\\n\\nBased on your recent visit, we picked these products for you:\\n\\n',
+                arrayStringConcat(groupArray(concat('- ', product_name, ': ', product_url, ' — ', reason)), '\\n'),
+                '\\n\\nThis is a prepared draft. Real sending is disabled until SMTP and consent rules are enabled.'
+            ) AS body_text,
+            concat(
+                '<p>Hi,</p><p>Based on your recent visit, we picked these products for you:</p><ul>',
+                arrayStringConcat(groupArray(concat('<li><a href="', product_url, '">', product_name, '</a><br/><small>', reason, '</small></li>')), ''),
+                '</ul><p><em>This is a prepared draft. Real sending is disabled until SMTP and consent rules are enabled.</em></p>'
+            ) AS body_html,
+            latest_generated_at AS generated_at,
+            now64(3) AS created_at,
+            now64(3) AS updated_at
+        FROM
+        (
+            SELECT
+                *,
+                customer_email AS to_email
+            FROM customer_recommendation_candidates
+            WHERE site_id = {quote(site_id)}
+              AND generated_at = latest_generated_at
+              AND customer_email != ''
+              AND position(customer_email, '@') > 1
+              AND rec_rank <= 3
+              {recommendation_filter}
+            ORDER BY to_email, rec_rank ASC, score DESC
+        )
+        GROUP BY site_id, to_email
         """
     )
 
@@ -1463,6 +2163,9 @@ def refresh_site(client: ClickHouseHttpClient, site_id: str, start: datetime, en
     refresh_search_daily_metrics(client, site_id, daily_start, end)
     refresh_checkout_method_daily_metrics(client, site_id, daily_start, end)
     refresh_data_quality_daily(client, site_id, daily_start, end)
+    refresh_product_catalog(client, site_id, daily_start, end)
+    refresh_customer_recommendations(client, site_id, start, end)
+    refresh_recommendation_email_outbox(client, site_id)
     generate_site_insights(client, site_id, daily_start, end)
 
 
@@ -1543,7 +2246,7 @@ def airflow_task(**context) -> None:
 if DAG is not None:
     with DAG(
         dag_id="behavior_layer2_test_refresh",
-        description="Refresh Layer 2 behaviour analytics tables from ClickHouse raw events.",
+        description="Refresh behaviour insights tables from ClickHouse raw events.",
         start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
         schedule="*/15 * * * *",
         catchup=False,
@@ -1563,7 +2266,7 @@ if DAG is not None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Refresh Layer 2 behaviour analytics tables.")
+    parser = argparse.ArgumentParser(description="Refresh behaviour insights analytics tables.")
     parser.add_argument("--site-id", default=None, help="Site to refresh. Omit or use 'all' for every site in window.")
     parser.add_argument("--lookback-hours", type=int, default=24, help="Lookback window when explicit dates are omitted.")
     parser.add_argument("--window-start", default=None, help="UTC start, e.g. 2026-05-03T00:00:00+00:00.")

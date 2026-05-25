@@ -1,3 +1,4 @@
+import { DEFAULT_AUTOMATION_INTENSITY, ensureAutomationSettingsSchema } from "@/lib/automation-settings"
 import { clickhouseQuery, num, sqlString, str } from "@/lib/clickhouse"
 
 export interface BehaviorInsights {
@@ -156,6 +157,7 @@ export interface BehaviorInsights {
     top_products: Array<{
       product_id: string
       product_name?: string
+      product_url?: string
       product_views: number
       impressions: number
       clicks: number
@@ -239,9 +241,100 @@ export interface BehaviorInsights {
       }>
       reason?: string
     }
+    purchase_intent?: {
+      status: string
+      average_score: number
+      sessions_scored: number
+      visitors_scored: number
+      high_intent_sessions: number
+      medium_intent_sessions: number
+      low_intent_sessions: number
+      cold_sessions: number
+      converted_sessions: number
+      open_intent_sessions: number
+      open_intent_visitors: number
+      distribution: Array<{
+        tier: string
+        sessions: number
+        visitors: number
+        open_sessions: number
+        avg_score: number
+        share_pct: number
+      }>
+      reasons: Array<{
+        reason: string
+        sessions: number
+        avg_score: number
+      }>
+      top_opportunities: Array<{
+        session_id: string
+        visitor_id: string
+        customer_id: string
+        customer_email: string
+        score: number
+        tier: string
+        reason: string
+        session_end: string
+        duration_sec: number
+        event_count: number
+        product_view_count: number
+        add_to_cart_count: number
+        checkout_start_count: number
+        cart_value_tnd: number
+        last_page_url: string
+        referrer_url: string
+      }>
+    }
     random_forest_feature_importance?: Array<{
       feature: string
       importance: number
+    }>
+  }
+  recommendations: {
+    status: string
+    generated_at: string
+    total_candidates: number
+    visitors: number
+    emailable_customers: number
+    prepared_emails: number
+    avg_score: number
+    abandoned_cart_candidates: number
+    repeated_interest_candidates: number
+    automation: {
+      recommendation_intensity: number
+      sending_mode: string
+      max_emails_per_customer_week: number
+      cooldown_hours: number
+      consent_required: boolean
+      updated_at: string
+    }
+    top_candidates: Array<{
+      recommendation_id: string
+      visitor_id: string
+      customer_id: string
+      customer_email: string
+      product_id: string
+      product_name: string
+      product_url: string
+      product_category: string
+      recommendation_type: string
+      reason: string
+      score: number
+      rec_rank: number
+      views: number
+      add_to_cart_events: number
+      last_signal_at: string
+    }>
+    email_outbox: Array<{
+      email_id: string
+      to_email: string
+      subject: string
+      preview_text: string
+      status: string
+      provider: string
+      product_count: number
+      generated_at: string
+      updated_at: string
     }>
   }
   operations: {
@@ -406,11 +499,32 @@ function emptyInsights(siteId: string): BehaviorInsights {
     daily_trends: [],
     sales_trends: [],
     column_utilization: {
-      note: `No Layer 2 metrics are available for site_id=${siteId}. Trigger the Airflow Layer 2 DAG first.`,
+      note: `No analysis metrics are available for site_id=${siteId}. Trigger an insights refresh first.`,
       top_15_filled: {},
     },
     event_mix: {},
     ml: {},
+    recommendations: {
+      status: "collecting",
+      generated_at: "",
+      total_candidates: 0,
+      visitors: 0,
+      emailable_customers: 0,
+      prepared_emails: 0,
+      avg_score: 0,
+      abandoned_cart_candidates: 0,
+      repeated_interest_candidates: 0,
+      automation: {
+        recommendation_intensity: DEFAULT_AUTOMATION_INTENSITY,
+        sending_mode: "draft_only",
+        max_emails_per_customer_week: 2,
+        cooldown_hours: 72,
+        consent_required: true,
+        updated_at: "",
+      },
+      top_candidates: [],
+      email_outbox: [],
+    },
     operations: {
       site: {
         site_id: siteId,
@@ -632,6 +746,8 @@ function sortedChannelRows(
 }
 
 export async function loadInsights(siteIdOverride?: string): Promise<BehaviorInsights> {
+  await ensureAutomationSettingsSchema()
+
   const siteId = getSiteId(siteIdOverride)
   const days = getLookbackDays()
   const salesDays = getSalesLookbackDays()
@@ -667,6 +783,14 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
     checkoutHealthRows,
     insightRows,
     segmentRows,
+    intentSummaryRows,
+    intentDistributionRows,
+    intentReasonRows,
+    intentOpportunityRows,
+    recommendationSummaryRows,
+    recommendationCandidateRows,
+    recommendationEmailRows,
+    automationSettingsRows,
     recentEventRows,
     siteRows,
     keyRows,
@@ -925,7 +1049,8 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
     clickhouseQuery(`
       SELECT
         product_id,
-        anyLast(product_name) AS product_name,
+        argMaxIf(product_name, updated_at, product_name != '') AS product_name,
+        argMaxIf(product_url, updated_at, product_url != '') AS product_url,
         sum(views) AS product_views,
         sum(impressions) AS impressions,
         sum(clicks) AS clicks,
@@ -1035,6 +1160,159 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
     `),
     clickhouseQuery(`
       SELECT
+        count() AS sessions_scored,
+        uniqExactIf(visitor_id, visitor_id != '') AS visitors_scored,
+        round(avg(purchase_intent_score), 2) AS average_score,
+        countIf(purchase_intent_tier = 'converted') AS converted_sessions,
+        countIf(purchase_intent_tier = 'high') AS high_intent_sessions,
+        countIf(purchase_intent_tier = 'medium') AS medium_intent_sessions,
+        countIf(purchase_intent_tier = 'low') AS low_intent_sessions,
+        countIf(purchase_intent_tier = 'cold') AS cold_sessions,
+        countIf(has_purchase = 0 AND purchase_intent_tier IN ('high', 'medium')) AS open_intent_sessions,
+        uniqExactIf(visitor_id, has_purchase = 0 AND purchase_intent_tier IN ('high', 'medium') AND visitor_id != '') AS open_intent_visitors
+      FROM tracer.session_features FINAL
+      WHERE site_id = ${quotedSite}
+        AND ${sessionFilter}
+    `),
+    clickhouseQuery(`
+      SELECT
+        purchase_intent_tier AS tier,
+        count() AS sessions,
+        uniqExactIf(visitor_id, visitor_id != '') AS visitors,
+        countIf(has_purchase = 0) AS open_sessions,
+        round(avg(purchase_intent_score), 2) AS avg_score
+      FROM tracer.session_features FINAL
+      WHERE site_id = ${quotedSite}
+        AND ${sessionFilter}
+      GROUP BY purchase_intent_tier
+      ORDER BY multiIf(tier = 'converted', 1, tier = 'high', 2, tier = 'medium', 3, tier = 'low', 4, 5)
+    `),
+    clickhouseQuery(`
+      SELECT
+        purchase_intent_reason AS reason,
+        count() AS sessions,
+        round(avg(purchase_intent_score), 2) AS avg_score
+      FROM tracer.session_features FINAL
+      WHERE site_id = ${quotedSite}
+        AND ${sessionFilter}
+      GROUP BY purchase_intent_reason
+      ORDER BY sessions DESC, avg_score DESC
+      LIMIT 6
+    `),
+    clickhouseQuery(`
+      SELECT
+        session_id,
+        visitor_id,
+        customer_id,
+        ifNull(customer_email, '') AS customer_email,
+        purchase_intent_score AS score,
+        purchase_intent_tier AS tier,
+        purchase_intent_reason AS reason,
+        session_end,
+        duration_sec,
+        event_count,
+        product_view_count,
+        add_to_cart_count,
+        checkout_start_count,
+        cart_value_max AS cart_value_tnd,
+        last_page_url,
+        referrer_url
+      FROM tracer.session_features FINAL
+      WHERE site_id = ${quotedSite}
+        AND ${sessionFilter}
+        AND has_purchase = 0
+        AND purchase_intent_tier IN ('high', 'medium')
+      ORDER BY purchase_intent_score DESC, session_end DESC
+      LIMIT 8
+    `),
+    clickhouseQuery(`
+      WITH
+        (
+          SELECT max(generated_at)
+          FROM tracer.customer_recommendation_candidates
+          WHERE site_id = ${quotedSite}
+        ) AS latest_generated_at
+      SELECT
+        latest_generated_at AS generated_at,
+        count() AS total_candidates,
+        uniqExactIf(visitor_id, visitor_id != '') AS visitors,
+        uniqExactIf(customer_email, customer_email != '') AS emailable_customers,
+        round(avg(score), 2) AS avg_score,
+        countIf(recommendation_type = 'abandoned_cart') AS abandoned_cart_candidates,
+        countIf(recommendation_type = 'repeated_interest') AS repeated_interest_candidates
+      FROM tracer.customer_recommendation_candidates AS candidate
+      WHERE candidate.site_id = ${quotedSite}
+        AND candidate.generated_at = latest_generated_at
+    `),
+    clickhouseQuery(`
+      WITH
+        (
+          SELECT max(generated_at)
+          FROM tracer.customer_recommendation_candidates
+          WHERE site_id = ${quotedSite}
+        ) AS latest_generated_at
+      SELECT
+        recommendation_id,
+        visitor_id,
+        customer_id,
+        customer_email,
+        product_id,
+        product_name,
+        product_url,
+        product_category,
+        recommendation_type,
+        reason,
+        score,
+        rec_rank,
+        views,
+        add_to_cart_events,
+        last_signal_at
+      FROM tracer.customer_recommendation_candidates AS candidate
+      WHERE candidate.site_id = ${quotedSite}
+        AND candidate.generated_at = latest_generated_at
+      ORDER BY score DESC, rec_rank ASC, last_signal_at DESC
+      LIMIT 8
+    `),
+    clickhouseQuery(`
+      WITH
+        (
+          SELECT max(generated_at)
+          FROM tracer.recommendation_email_outbox FINAL
+          WHERE site_id = ${quotedSite}
+            AND status = 'prepared'
+        ) AS latest_generated_at
+      SELECT
+        email_id,
+        to_email,
+        subject,
+        preview_text,
+        status,
+        provider,
+        length(product_ids) AS product_count,
+        generated_at,
+        updated_at
+      FROM tracer.recommendation_email_outbox FINAL
+      WHERE site_id = ${quotedSite}
+        AND status = 'prepared'
+        AND generated_at = latest_generated_at
+      ORDER BY updated_at DESC
+      LIMIT 8
+    `),
+    clickhouseQuery(`
+      SELECT
+        recommendation_intensity,
+        sending_mode,
+        max_emails_per_customer_week,
+        cooldown_hours,
+        consent_required,
+        updated_at
+      FROM tracer.site_automation_settings FINAL
+      WHERE site_id = ${quotedSite}
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `),
+    clickhouseQuery(`
+      SELECT
         event_name,
         event_type,
         page_url,
@@ -1098,6 +1376,9 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
   const loyalty = latest(loyaltyRows, {})
   const quality = latest(qualityRows, {})
   const checkoutHealth = latest(checkoutHealthRows, {})
+  const intentSummary = latest(intentSummaryRows, {})
+  const recommendationSummary = latest(recommendationSummaryRows, {})
+  const automationSettings = latest(automationSettingsRows, {})
   const site = latest(siteRows, {})
   const orderLifecycle = latest(orderLifecycleRows, {})
   const internalDomains = internalDomainsFromSite(site)
@@ -1128,6 +1409,7 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
   const buyerCampaignTotal = buyerCampaignRows.reduce((sum, row) => sum + num(row.sessions), 0)
   const channelTotal = channelRows.reduce((sum, row) => sum + num(row.sessions), 0)
   const buyerChannelTotal = channelRows.reduce((sum, row) => sum + num(row.buyer_sessions), 0)
+  const intentSessions = num(intentSummary.sessions_scored)
   const topReferrers = referrerRows
     .slice(0, 10)
     .map((row) => {
@@ -1325,6 +1607,7 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
       top_products: productRows.map((row) => ({
         product_id: str(row.product_id),
         product_name: str(row.product_name),
+        product_url: str(row.product_url),
         product_views: num(row.product_views),
         impressions: num(row.impressions),
         clicks: num(row.clicks),
@@ -1379,7 +1662,7 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
       revenue: num(row.revenue),
     })),
     column_utilization: {
-      note: "Operational coverage from Layer 2 data quality checks.",
+      note: "Operational coverage from analysis data quality checks.",
       top_15_filled: filled,
     },
     event_mix: eventMix,
@@ -1398,8 +1681,99 @@ export async function loadInsights(siteIdOverride?: string): Promise<BehaviorIns
       },
       purchase_propensity: {
         status: "skipped",
-        reason: "ML is intentionally delayed. Current dashboard uses deterministic Layer 2 metrics and behavior segments.",
+        reason: "ML is intentionally delayed. Current dashboard uses deterministic behaviour metrics and segments.",
       },
+      purchase_intent: {
+        status: intentSessions ? "ready" : "collecting",
+        average_score: num(intentSummary.average_score),
+        sessions_scored: intentSessions,
+        visitors_scored: num(intentSummary.visitors_scored),
+        high_intent_sessions: num(intentSummary.high_intent_sessions),
+        medium_intent_sessions: num(intentSummary.medium_intent_sessions),
+        low_intent_sessions: num(intentSummary.low_intent_sessions),
+        cold_sessions: num(intentSummary.cold_sessions),
+        converted_sessions: num(intentSummary.converted_sessions),
+        open_intent_sessions: num(intentSummary.open_intent_sessions),
+        open_intent_visitors: num(intentSummary.open_intent_visitors),
+        distribution: intentDistributionRows.map((row) => ({
+          tier: str(row.tier, "cold"),
+          sessions: num(row.sessions),
+          visitors: num(row.visitors),
+          open_sessions: num(row.open_sessions),
+          avg_score: num(row.avg_score),
+          share_pct: safePct(num(row.sessions), intentSessions),
+        })),
+        reasons: intentReasonRows.map((row) => ({
+          reason: str(row.reason, "Browsing activity"),
+          sessions: num(row.sessions),
+          avg_score: num(row.avg_score),
+        })),
+        top_opportunities: intentOpportunityRows.map((row) => ({
+          session_id: str(row.session_id),
+          visitor_id: str(row.visitor_id),
+          customer_id: str(row.customer_id),
+          customer_email: str(row.customer_email),
+          score: num(row.score),
+          tier: str(row.tier),
+          reason: str(row.reason),
+          session_end: str(row.session_end),
+          duration_sec: num(row.duration_sec),
+          event_count: num(row.event_count),
+          product_view_count: num(row.product_view_count),
+          add_to_cart_count: num(row.add_to_cart_count),
+          checkout_start_count: num(row.checkout_start_count),
+          cart_value_tnd: num(row.cart_value_tnd),
+          last_page_url: str(row.last_page_url),
+          referrer_url: str(row.referrer_url),
+        })),
+      },
+    },
+    recommendations: {
+      status: num(recommendationSummary.total_candidates) ? "ready" : "collecting",
+      generated_at: str(recommendationSummary.generated_at),
+      total_candidates: num(recommendationSummary.total_candidates),
+      visitors: num(recommendationSummary.visitors),
+      emailable_customers: num(recommendationSummary.emailable_customers),
+      prepared_emails: recommendationEmailRows.length,
+      avg_score: num(recommendationSummary.avg_score),
+      abandoned_cart_candidates: num(recommendationSummary.abandoned_cart_candidates),
+      repeated_interest_candidates: num(recommendationSummary.repeated_interest_candidates),
+      automation: {
+        recommendation_intensity: Math.min(Math.max(Math.round(num(automationSettings.recommendation_intensity, DEFAULT_AUTOMATION_INTENSITY)), 1), 10),
+        sending_mode: str(automationSettings.sending_mode, "draft_only"),
+        max_emails_per_customer_week: num(automationSettings.max_emails_per_customer_week, 2),
+        cooldown_hours: num(automationSettings.cooldown_hours, 72),
+        consent_required: num(automationSettings.consent_required, 1) === 1,
+        updated_at: str(automationSettings.updated_at),
+      },
+      top_candidates: recommendationCandidateRows.map((row) => ({
+        recommendation_id: str(row.recommendation_id),
+        visitor_id: str(row.visitor_id),
+        customer_id: str(row.customer_id),
+        customer_email: str(row.customer_email),
+        product_id: str(row.product_id),
+        product_name: str(row.product_name),
+        product_url: str(row.product_url),
+        product_category: str(row.product_category),
+        recommendation_type: str(row.recommendation_type),
+        reason: str(row.reason),
+        score: num(row.score),
+        rec_rank: num(row.rec_rank),
+        views: num(row.views),
+        add_to_cart_events: num(row.add_to_cart_events),
+        last_signal_at: str(row.last_signal_at),
+      })),
+      email_outbox: recommendationEmailRows.map((row) => ({
+        email_id: str(row.email_id),
+        to_email: str(row.to_email),
+        subject: str(row.subject),
+        preview_text: str(row.preview_text),
+        status: str(row.status),
+        provider: str(row.provider),
+        product_count: num(row.product_count),
+        generated_at: str(row.generated_at),
+        updated_at: str(row.updated_at),
+      })),
     },
     operations: {
       site: {
