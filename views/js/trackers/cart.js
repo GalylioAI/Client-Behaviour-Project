@@ -14,6 +14,55 @@ const BehaviourTrackerCart = {
         }
     },
 
+    cleanText: function (value) {
+        return (value || '').toString().replace(/\s+/g, ' ').trim();
+    },
+
+    isGenericProductName: function (value) {
+        const normalized = this.cleanText(value).toLowerCase();
+        return [
+            'accueil',
+            'home',
+            'recherche',
+            'search',
+            'produit',
+            'produits',
+            'product',
+            'products',
+            'promos',
+            'promotion',
+            'الرئيسية'
+        ].includes(normalized);
+    },
+
+    productNameFromUrl: function (url) {
+        if (!url) return '';
+        try {
+            const parsed = new URL(url, window.location.origin);
+            const segment = decodeURIComponent(parsed.pathname.split('/').filter(Boolean).pop() || '');
+            return this.cleanText(segment.replace(/\.html?$/i, '').replace(/^\d+[-_]/, '').replace(/[-_]+/g, ' '));
+        } catch (e) {
+            return '';
+        }
+    },
+
+    getProductUrlFromElement: function (element) {
+        if (document.body.id === 'product') {
+            return document.querySelector('link[rel="canonical"]')?.href || window.location.href;
+        }
+        const link = element?.querySelector?.('.product-title a[href], .product-name a[href], .product-link[href], a[href*=".html"], a[href]');
+        return link?.href || '';
+    },
+
+    getProductNameFromElement: function (element, productUrl) {
+        const selectorText = element?.querySelector?.('[itemprop="name"], .product-title a, .product-title, .product-name, .product-link, h1, .h1, h2, h3')?.innerText;
+        const attrText = element?.getAttribute?.('data-product-name') ||
+            element?.querySelector?.('a[title]')?.getAttribute('title') ||
+            element?.querySelector?.('img[alt]')?.getAttribute('alt');
+        const name = this.cleanText(attrText || selectorText);
+        return name && !this.isGenericProductName(name) ? name : this.productNameFromUrl(productUrl);
+    },
+
     /**
      * Track Add to Cart (Button Clicks)
      * Fallback if PrestaShop events fail
@@ -40,10 +89,9 @@ const BehaviourTrackerCart = {
             form?.querySelector('[name="id_product"]')?.value ||
             form?.querySelector('[name="id_product_attribute"]')?.value ||
             '';
-        const productName = button.getAttribute('data-product-name') ||
-            document.querySelector('h1, .h1, .product-title')?.innerText ||
-            button.closest('.product-miniature')?.querySelector('.product-title, h2, h3')?.innerText ||
-            '';
+        const productElement = button.closest('.product-miniature, [itemtype="https://schema.org/Product"], #product') || document;
+        const productUrl = this.getProductUrlFromElement(productElement);
+        const productName = button.getAttribute('data-product-name') || this.getProductNameFromElement(productElement, productUrl);
         const quantity = form?.querySelector('[name="qty"], [name="quantity_wanted"]')?.value || 1;
 
         if (this.isDuplicateAddToCart(productId || productName || 'unknown')) {
@@ -57,6 +105,7 @@ const BehaviourTrackerCart = {
             session_id: BehaviourTrackerSession.getOrCreateSessionId(),
             product_id: productId,
             product_name: productName,
+            product_url: productUrl,
             quantity_added: parseInt(quantity, 10) || 1,
             source: document.body.id === 'product' ? 'product_page' : 'product_list'
         });
@@ -94,6 +143,11 @@ const BehaviourTrackerCart = {
 
                 if (productId) {
                     data.product_id = productId;
+                }
+                if (document.body.id === 'product') {
+                    const productElement = document.querySelector('[itemtype="https://schema.org/Product"], #product') || document;
+                    data.product_url = this.getProductUrlFromElement(productElement);
+                    data.product_name = this.getProductNameFromElement(productElement, data.product_url);
                 }
 
                 this.sendData(data);

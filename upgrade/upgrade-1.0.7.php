@@ -15,6 +15,8 @@ function upgrade_module_1_0_7($module)
         $ok = $module->registerHook('actionValidateOrder') && $ok;
         $ok = $module->registerHook('actionOrderStatusUpdate') && $ok;
         $ok = $module->registerHook('actionOrderStatusPostUpdate') && $ok;
+        $ok = $module->registerHook('actionOrderHistoryAddAfter') && $ok;
+        $ok = $module->registerHook('actionProductCancel') && $ok;
         $ok = $module->registerHook('actionCustomerAccountAdd') && $ok;
         $ok = $module->registerHook('actionAuthentication') && $ok;
         $ok = $module->registerHook('actionCustomerLogoutAfter') && $ok;
